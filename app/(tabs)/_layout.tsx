@@ -1,59 +1,97 @@
+// Tab Layout - Bottom navigation with 보관 and 설정 tabs
 import React from 'react';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Link, Tabs } from 'expo-router';
-import { Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
+import { View, StyleSheet } from 'react-native';
 
 import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
-// You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
+// Mobile-first: max width 390px
+const MAX_WIDTH = 390;
+
 function TabBarIcon(props: {
-  name: React.ComponentProps<typeof FontAwesome>['name'];
+  name: React.ComponentProps<typeof Ionicons>['name'];
   color: string;
 }) {
-  return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
+  return <Ionicons size={24} style={{ marginBottom: 0 }} {...props} />;
 }
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const { effectiveTheme } = useAppSettings();
+  const colors = Colors[effectiveTheme];
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Tab One',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable>
-                {({ pressed }) => (
-                  <FontAwesome
-                    name="info-circle"
-                    size={25}
-                    color={Colors[colorScheme ?? 'light'].text}
-                    style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="two"
-        options={{
-          title: 'Tab Two',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
-        }}
-      />
-    </Tabs>
+    <View style={[styles.outerContainer, { backgroundColor: colors.background }]}>
+      <View style={styles.mobileContainer}>
+        <Tabs
+          screenOptions={{
+            tabBarActiveTintColor: colors.accent,
+            tabBarInactiveTintColor: colors.tabIconDefault,
+            tabBarStyle: {
+              backgroundColor: colors.background,
+              borderTopColor: colors.border,
+              borderTopWidth: 1,
+              height: 70,
+              paddingTop: 8,
+              paddingBottom: 8,
+            },
+            tabBarLabelStyle: {
+              fontSize: 11,
+              fontWeight: '500',
+              marginTop: 4,
+              marginBottom: 0,
+            },
+            tabBarItemStyle: {
+              paddingBottom: 0,
+            },
+            headerShown: false,
+            sceneStyle: {
+              backgroundColor: colors.background,
+            },
+          }}
+        >
+          <Tabs.Screen
+            name="index"
+            options={{
+              title: '보관',
+              tabBarIcon: ({ color, focused }) => (
+                <TabBarIcon name={focused ? 'folder' : 'folder-outline'} color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="explore"
+            options={{
+              title: '탐색',
+              tabBarIcon: ({ color, focused }) => (
+                <TabBarIcon name={focused ? 'compass' : 'compass-outline'} color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="settings"
+            options={{
+              title: '설정',
+              tabBarIcon: ({ color, focused }) => (
+                <TabBarIcon name={focused ? 'settings' : 'settings-outline'} color={color} />
+              ),
+            }}
+          />
+        </Tabs>
+      </View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  mobileContainer: {
+    flex: 1,
+    width: '100%',
+    maxWidth: MAX_WIDTH,
+  },
+});

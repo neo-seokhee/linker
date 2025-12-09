@@ -1,3 +1,4 @@
+// Root Layout with LinksProvider and AppSettingsProvider
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
@@ -6,7 +7,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { LinksProvider } from '@/hooks/useLinks';
+import { AppSettingsProvider, useAppSettings } from '@/hooks/useAppSettings';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -42,18 +44,45 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <AppSettingsProvider>
+      <RootLayoutNav />
+    </AppSettingsProvider>
+  );
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const { effectiveTheme } = useAppSettings();
+
+  // Custom dark theme with cyan accent
+  const LinkerDarkTheme = {
+    ...DarkTheme,
+    colors: {
+      ...DarkTheme.colors,
+      background: '#000000',
+      card: '#000000',
+      primary: '#00FFFF',
+    },
+  };
+
+  const LinkerLightTheme = {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: '#FFFFFF',
+      card: '#FFFFFF',
+      primary: '#00FFFF',
+    },
+  };
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
+    <ThemeProvider value={effectiveTheme === 'dark' ? LinkerDarkTheme : LinkerLightTheme}>
+      <LinksProvider>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        </Stack>
+      </LinksProvider>
     </ThemeProvider>
   );
 }
