@@ -63,21 +63,32 @@ export function useExplore(): UseExploreReturn {
     };
 
     // Transform DB link to ExploreLink
-    const transformLink = (dbLink: any, likeCount: number, isLiked: boolean, nickname?: string, profileImage?: string): ExploreLink => ({
-        id: dbLink.id,
-        url: dbLink.url,
-        title: dbLink.custom_title || dbLink.og_title,
-        thumbnail: dbLink.og_image || 'https://picsum.photos/400/200',
-        description: dbLink.og_description,
-        userId: dbLink.user_id,
-        userEmail: dbLink.users?.email,
-        userNickname: nickname || 'user',
-        userProfileImage: profileImage || undefined,
-        likes: likeCount,
-        category: getCategoryFromLink(dbLink),
-        createdAt: dbLink.created_at,
-        isLiked,
-    });
+    const transformLink = (dbLink: any, likeCount: number, isLiked: boolean, nickname?: string, profileImage?: string): ExploreLink => {
+        // Generate a deterministic fallback image based on URL domain
+        let fallbackImage = '';
+        try {
+            const domain = new URL(dbLink.url).hostname.replace('www.', '');
+            fallbackImage = `https://www.google.com/s2/favicons?domain=${domain}&sz=256`;
+        } catch {
+            fallbackImage = 'https://www.google.com/s2/favicons?domain=link.com&sz=256';
+        }
+
+        return {
+            id: dbLink.id,
+            url: dbLink.url,
+            title: dbLink.custom_title || dbLink.og_title,
+            thumbnail: dbLink.og_image || fallbackImage,
+            description: dbLink.og_description,
+            userId: dbLink.user_id,
+            userEmail: dbLink.users?.email,
+            userNickname: nickname || 'user',
+            userProfileImage: profileImage || undefined,
+            likes: likeCount,
+            category: getCategoryFromLink(dbLink),
+            createdAt: dbLink.created_at,
+            isLiked,
+        };
+    };
 
     // Auto-categorize based on URL domain when category is missing or '미분류'
     const getCategoryFromLink = (dbLink: any): string => {
