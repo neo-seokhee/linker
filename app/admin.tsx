@@ -327,7 +327,7 @@ export default function AdminPage() {
             // Build query
             let query = supabase
                 .from('links')
-                .select('id, url, og_title, og_image, is_featured, is_public, created_at, user_id, category_id')
+                .select('id, url, og_title, og_image, is_featured, is_public, created_at, user_id, category_id, boost_score')
                 .order('created_at', { ascending: false });
 
             // Apply filter
