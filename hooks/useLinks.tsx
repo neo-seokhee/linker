@@ -93,28 +93,37 @@ export function LinksProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const addSampleLinksForNewUser = async (userId: string) => {
-        // Check if user has any links already
-        const { data: existingLinks } = await supabase
-            .from('links')
-            .select('id')
-            .eq('user_id', userId)
-            .limit(1);
+        // Check if sample links were already added (using flag in profiles table)
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('sample_links_added')
+            .eq('id', userId)
+            .single();
 
-        // If user has no links, add sample links
-        if (!existingLinks || existingLinks.length === 0) {
-            const linksWithUserId = SAMPLE_LINKS.map(link => ({
-                ...link,
-                user_id: userId,
-            }));
-
-            const { error } = await supabase
-                .from('links')
-                .insert(linksWithUserId);
-
-            if (error) {
-                console.error('Error adding sample links:', error);
-            }
+        // Only add sample links if flag is false or null
+        if (profile?.sample_links_added) {
+            return; // Sample links already added before
         }
+
+        const linksWithUserId = SAMPLE_LINKS.map(link => ({
+            ...link,
+            user_id: userId,
+        }));
+
+        const { error } = await supabase
+            .from('links')
+            .insert(linksWithUserId);
+
+        if (error) {
+            console.error('Error adding sample links:', error);
+            return;
+        }
+
+        // Set flag to true so sample links won't be added again
+        await supabase
+            .from('profiles')
+            .update({ sample_links_added: true })
+            .eq('id', userId);
     };
 
     const loadData = async () => {
@@ -136,10 +145,10 @@ export function LinksProvider({ children }: { children: ReactNode }) {
                 setCategories(categoriesData.map(dbCategoryToCategory));
             }
 
-            // Add sample links for first-time users
-            if (user) {
-                await addSampleLinksForNewUser(user.id);
-            }
+            // Add sample links for first-time users (DISABLED - causing infinite loop)
+            // if (user) {
+            //     await addSampleLinksForNewUser(user.id);
+            // }
 
             // Load links (RLS will filter by user_id automatically)
             const { data: linksData, error: linksError } = await supabase

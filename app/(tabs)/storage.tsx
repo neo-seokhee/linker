@@ -17,6 +17,7 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Text,
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,7 +30,7 @@ export default function StoragePage() {
   const colors = Colors[effectiveTheme];
   const insets = useSafeAreaInsets();
   const { user, isLoading: isAuthLoading } = useAuth();
-  const { categories, getLinksForCategory, toggleFavorite, isLoading } = useLinks();
+  const { categories, getLinksForCategory, toggleFavorite, isLoading, links } = useLinks();
 
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -83,25 +84,35 @@ export default function StoragePage() {
             />
           }
         >
-          {categories.map((category) => {
-            const links = getLinksForCategory(category.id);
+          {/* Empty State */}
+          {links.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📎</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>저장된 링크가 없습니다</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                + 버튼을 눌러 첫 번째 링크를 추가해보세요!
+              </Text>
+            </View>
+          ) : (
+            categories.map((category) => {
+              const categoryLinks = getLinksForCategory(category.id);
 
-            // Hide uncategorized category if it has no links
-            if (category.id === '00000000-0000-0000-0000-000000000005' && links.length === 0) {
-              return null;
-            }
+              // Hide uncategorized category if it has no links
+              if (category.id === '00000000-0000-0000-0000-000000000005' && categoryLinks.length === 0) {
+                return null;
+              }
 
-            return (
-              <CategorySection
-                key={category.id}
-                category={category}
-                links={links}
-                onLinkPress={handleLinkPress}
-                onFavoriteToggle={toggleFavorite}
-              />
-
-            );
-          })}
+              return (
+                <CategorySection
+                  key={category.id}
+                  category={category}
+                  links={categoryLinks}
+                  onLinkPress={handleLinkPress}
+                  onFavoriteToggle={toggleFavorite}
+                />
+              );
+            })
+          )}
 
           {/* Bottom padding for FAB */}
           <View style={{ height: 100 }} />
@@ -140,5 +151,26 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: 12,
+    flexGrow: 1,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
