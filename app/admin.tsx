@@ -658,6 +658,18 @@ export default function AdminPage() {
                                                 });
                                         }}
                                     />
+                                    <TouchableOpacity
+                                        style={[styles.saveBtnSmall, { backgroundColor: colors.accent }]}
+                                        onPress={() => {
+                                            supabase.from('links').update({ boost_score: link.boost_score || 0 }).eq('id', link.id)
+                                                .then(({ error }) => {
+                                                    if (error) alert('저장 실패: ' + error.message);
+                                                    else alert('저장됨');
+                                                });
+                                        }}
+                                    >
+                                        <Text style={styles.saveBtnSmallText}>저장</Text>
+                                    </TouchableOpacity>
                                 </View>
                                 <TouchableOpacity
                                     style={[styles.actionButton, { backgroundColor: link.is_featured ? colors.accent : colors.border }]}
@@ -751,8 +763,13 @@ export default function AdminPage() {
                                         p.id === item.id ? { ...p, boost_score: newScore, totalScore: (p.likes_count || 0) + newScore } : p
                                     ));
                                 }}
-                                onBlur={() => updateBoostScore(item.id, item.boost_score || 0, item.source)}
                             />
+                            <TouchableOpacity
+                                style={[styles.saveBtn, { backgroundColor: colors.accent }]}
+                                onPress={() => updateBoostScore(item.id, item.boost_score || 0, item.source)}
+                            >
+                                <Text style={styles.saveBtnText}>저장</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 ))
@@ -1377,5 +1394,27 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         textAlign: 'center',
         fontSize: 12,
+    },
+    saveBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 6,
+        marginLeft: 6,
+    },
+    saveBtnText: {
+        color: '#000',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    saveBtnSmall: {
+        paddingHorizontal: 6,
+        paddingVertical: 4,
+        borderRadius: 4,
+        marginLeft: 4,
+    },
+    saveBtnSmallText: {
+        color: '#000',
+        fontSize: 10,
+        fontWeight: '600',
     },
 });

@@ -1,8 +1,7 @@
 // Explore Hook - Fetches live data for explore tab
 import { supabase } from '@/utils/supabaseClient';
 import { useCallback, useEffect, useState } from 'react';
-import { getNicknamesByUserIds } from './useProfile';
-
+import { getProfilesByUserIds } from './useProfile';
 // Types
 export interface ExploreLink {
     id: string;
@@ -13,6 +12,7 @@ export interface ExploreLink {
     userId: string;
     userEmail?: string;
     userNickname?: string; // Added nickname from profiles
+    userProfileImage?: string; // User's profile image
     likes: number;
     category: string;
     createdAt: string;
@@ -63,7 +63,7 @@ export function useExplore(): UseExploreReturn {
     };
 
     // Transform DB link to ExploreLink
-    const transformLink = (dbLink: any, likeCount: number, isLiked: boolean, nickname?: string): ExploreLink => ({
+    const transformLink = (dbLink: any, likeCount: number, isLiked: boolean, nickname?: string, profileImage?: string): ExploreLink => ({
         id: dbLink.id,
         url: dbLink.url,
         title: dbLink.custom_title || dbLink.og_title,
@@ -72,6 +72,7 @@ export function useExplore(): UseExploreReturn {
         userId: dbLink.user_id,
         userEmail: dbLink.users?.email,
         userNickname: nickname || 'user',
+        userProfileImage: profileImage || undefined,
         likes: likeCount,
         category: getCategoryFromLink(dbLink),
         createdAt: dbLink.created_at,
@@ -191,13 +192,54 @@ export function useExplore(): UseExploreReturn {
             console.log('favorite_history table not found');
         }
 
-        // Get nicknames for all link owners
-        const userIds = links.map(l => l.user_id).filter(Boolean);
-        const nicknameMap = await getNicknamesByUserIds(userIds);
+        // Get curated links that should show in feed
+        const { data: curatedLinks } = await supabase
+            .from('curated_links')
+            .select('*')
+            .eq('show_in_feed', true)
+            .order('created_at', { ascending: false });
 
-        return links.map(link =>
-            transformLink(link, likeCountMap[link.id] || 0, likedLinks.has(link.id), nicknameMap[link.user_id])
+        // Get profiles (nickname + avatar) for all link owners
+        const userIds = links.map(l => l.user_id).filter(Boolean);
+        const profileMap = await getProfilesByUserIds(userIds);
+
+        // Transform user links
+        const userFeedLinks = links.map(link => {
+            const profile = profileMap[link.user_id];
+            return transformLink(
+                link,
+                likeCountMap[link.id] || 0,
+                likedLinks.has(link.id),
+                profile?.nickname,
+                profile?.avatarUrl
+            );
+        });
+
+        // Transform curated links
+        const curatedFeedLinks = (curatedLinks || []).map(curated => transformLink(
+            {
+                id: curated.id,
+                url: curated.url,
+                og_title: curated.title,
+                custom_title: curated.title,
+                og_image: curated.thumbnail,
+                og_description: curated.description,
+                user_id: null,
+                category_id: null,
+                created_at: curated.created_at,
+            },
+            0,
+            false,
+            curated.nickname || '에디터 추천',
+            curated.profile_image
+        ));
+
+        // Combine and sort by created_at
+        const allLinks = [...userFeedLinks, ...curatedFeedLinks].sort((a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
+
+        return allLinks;
     };
 
     // Fetch Top 10 by 7-day like increment + boost score (including curated links)

@@ -202,3 +202,29 @@ export async function getNicknamesByUserIds(userIds: string[]): Promise<Record<s
 
     return nicknameMap;
 }
+
+// Batch get profiles (nickname + avatar) for multiple user IDs
+export async function getProfilesByUserIds(userIds: string[]): Promise<Record<string, { nickname: string; avatarUrl?: string }>> {
+    if (userIds.length === 0) return {};
+
+    const uniqueIds = Array.from(new Set(userIds));
+
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nickname, avatar_url')
+        .in('id', uniqueIds);
+
+    if (error || !data) {
+        return {};
+    }
+
+    const profileMap: Record<string, { nickname: string; avatarUrl?: string }> = {};
+    data.forEach(profile => {
+        profileMap[profile.id] = {
+            nickname: profile.nickname,
+            avatarUrl: profile.avatar_url || undefined,
+        };
+    });
+
+    return profileMap;
+}
