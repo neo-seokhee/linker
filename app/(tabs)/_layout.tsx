@@ -25,6 +25,7 @@ export default function TabLayout() {
     <View style={[styles.outerContainer, { backgroundColor: colors.background }]}>
       <View style={styles.mobileContainer}>
         <Tabs
+          backBehavior="history"
           screenOptions={{
             tabBarActiveTintColor: colors.accent,
             tabBarInactiveTintColor: colors.tabIconDefault,
