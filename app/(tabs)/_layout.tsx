@@ -1,8 +1,8 @@
 // Tab Layout - Bottom navigation with 보관 and 설정 tabs
-import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { View, StyleSheet } from 'react-native';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import Colors from '@/constants/Colors';
 import { useAppSettings } from '@/hooks/useAppSettings';
@@ -52,20 +52,20 @@ export default function TabLayout() {
           }}
         >
           <Tabs.Screen
-            name="index"
-            options={{
-              title: '보관',
-              tabBarIcon: ({ color, focused }) => (
-                <TabBarIcon name={focused ? 'folder' : 'folder-outline'} color={color} />
-              ),
-            }}
-          />
-          <Tabs.Screen
             name="explore"
             options={{
               title: '탐색',
               tabBarIcon: ({ color, focused }) => (
                 <TabBarIcon name={focused ? 'compass' : 'compass-outline'} color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="index"
+            options={{
+              title: '보관',
+              tabBarIcon: ({ color, focused }) => (
+                <TabBarIcon name={focused ? 'folder' : 'folder-outline'} color={color} />
               ),
             }}
           />

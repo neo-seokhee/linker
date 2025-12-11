@@ -2,10 +2,12 @@
 import { AddLinkModal } from '@/components/AddLinkModal';
 import { CategorySection } from '@/components/CategorySection';
 import { FloatingButton } from '@/components/FloatingButton';
+import { LoginScreen } from '@/components/LoginScreen';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import Colors from '@/constants/Colors';
 import { Link } from '@/constants/types';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import { useAuth } from '@/hooks/useAuth';
 import { useLinks } from '@/hooks/useLinks';
 import { useCallback, useState } from 'react';
 import {
@@ -26,6 +28,7 @@ export default function StoragePage() {
   const { effectiveTheme, setThemeMode } = useAppSettings();
   const colors = Colors[effectiveTheme];
   const insets = useSafeAreaInsets();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const { categories, getLinksForCategory, toggleFavorite, isLoading } = useLinks();
 
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
@@ -48,7 +51,12 @@ export default function StoragePage() {
     }
   };
 
-  if (isLoading) {
+  // Show login screen if not authenticated
+  if (!isAuthLoading && !user) {
+    return <LoginScreen />;
+  }
+
+  if (isLoading || isAuthLoading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.accent} />

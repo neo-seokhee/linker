@@ -2,14 +2,13 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, usePathname } from 'expo-router';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { LoginScreen } from '@/components/LoginScreen';
 import { AppSettingsProvider, useAppSettings } from '@/hooks/useAppSettings';
-import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import { AuthProvider } from '@/hooks/useAuth';
 import { LinksProvider } from '@/hooks/useLinks';
 
 export {
@@ -57,8 +56,6 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const { effectiveTheme } = useAppSettings();
-  const { user, isLoading } = useAuth();
-  const pathname = usePathname();
 
   // Custom dark theme with cyan accent
   const LinkerDarkTheme = {
@@ -81,17 +78,8 @@ function RootLayoutNav() {
     },
   };
 
-  // Allow admin page to bypass auth (it has its own password protection)
-  const isAdminRoute = pathname === '/admin';
-
-  // Show login screen if not authenticated (except for admin route)
-  if (!isLoading && !user && !isAdminRoute) {
-    return (
-      <ThemeProvider value={effectiveTheme === 'dark' ? LinkerDarkTheme : LinkerLightTheme}>
-        <LoginScreen />
-      </ThemeProvider>
-    );
-  }
+  // Auth check removed from root - individual tabs handle auth as needed
+  // (e.g., 보관 tab requires login, 탐색 tab does not)
 
   return (
     <ThemeProvider value={effectiveTheme === 'dark' ? LinkerDarkTheme : LinkerLightTheme}>
