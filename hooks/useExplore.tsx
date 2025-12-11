@@ -299,11 +299,11 @@ export function useExplore(): UseExploreReturn {
                 }
             });
 
-            // Get curated links that should show in top10
+            // Get curated links with boost_score > 0 (any curated link with boost score should appear in Top 10)
             const { data: curatedLinks } = await supabase
                 .from('curated_links')
                 .select('*')
-                .eq('show_in_top10', true);
+                .gt('boost_score', 0);
 
             // Get profiles for user links
             const userIds = allUserLinks.map(l => l.user_id).filter(Boolean);
@@ -388,36 +388,12 @@ export function useExplore(): UseExploreReturn {
                 .eq('show_in_featured', true)
                 .order('created_at', { ascending: false });
 
-            // Combine both
-            const allFeatured: any[] = [];
-
-            // Add curated links first (they're admin curated, higher priority)
-            curatedLinks?.forEach(curated => {
-                allFeatured.push({
-                    id: curated.id,
-                    url: curated.url,
-                    og_title: curated.title,
-                    custom_title: curated.title,
-                    og_image: curated.thumbnail,
-                    og_description: curated.description,
-                    user_id: null,
-                    category_id: null,
-                    created_at: curated.created_at,
-                    _source: 'curated',
-                });
-            });
-
-            // Add user featured links
-            userLinks?.forEach(link => {
-                allFeatured.push({ ...link, _source: 'user' });
-            });
-
-            if (allFeatured.length === 0) {
-                return [];
-            }
+            // Get profiles for user featured links
+            const userIds = (userLinks || []).map(l => l.user_id).filter(Boolean);
+            const profileMap = await getProfilesByUserIds(userIds);
 
             // Get like counts for user links
-            const userLinkIds = allFeatured.filter(l => l._source === 'user').map(l => l.id);
+            const userLinkIds = (userLinks || []).map(l => l.id);
             const likeCountMap: Record<string, number> = {};
 
             if (userLinkIds.length > 0) {
@@ -437,9 +413,41 @@ export function useExplore(): UseExploreReturn {
                 }
             }
 
-            return allFeatured.slice(0, 10).map(link =>
-                transformLink(link, likeCountMap[link.id] || 0, likedLinks.has(link.id))
+            // Transform curated links
+            const curatedFeatured: ExploreLink[] = (curatedLinks || []).map(curated =>
+                transformLink(
+                    {
+                        id: curated.id,
+                        url: curated.url,
+                        og_title: curated.title,
+                        custom_title: curated.title,
+                        og_image: curated.thumbnail,
+                        og_description: curated.description,
+                        user_id: null,
+                        category_id: null,
+                        created_at: curated.created_at,
+                    },
+                    0,
+                    false,
+                    curated.nickname || '에디터 추천',
+                    curated.profile_image
+                )
             );
+
+            // Transform user featured links with profile data
+            const userFeatured: ExploreLink[] = (userLinks || []).map(link => {
+                const profile = profileMap[link.user_id];
+                return transformLink(
+                    link,
+                    likeCountMap[link.id] || 0,
+                    likedLinks.has(link.id),
+                    profile?.nickname,
+                    profile?.avatarUrl
+                );
+            });
+
+            // Combine with curated first (higher priority)
+            return [...curatedFeatured, ...userFeatured].slice(0, 10);
         } catch (e) {
             console.log('Error in fetchFeatured:', e);
             return [];

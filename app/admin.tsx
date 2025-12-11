@@ -183,23 +183,46 @@ export default function AdminPage() {
                 likeCountMap[item.link_id] = (likeCountMap[item.link_id] || 0) + 1;
             });
 
-            // Get all links with their boost_score
-            const linkIds = Object.keys(likeCountMap);
-            let userLinks: any[] = [];
-
-            if (linkIds.length > 0) {
+            // Get links with likes
+            const likedLinkIds = Object.keys(likeCountMap);
+            let linksWithLikes: any[] = [];
+            if (likedLinkIds.length > 0) {
                 const { data } = await supabase
                     .from('links')
                     .select('id, url, og_title, og_image, boost_score, user_id')
-                    .in('id', linkIds);
-                userLinks = data || [];
+                    .in('id', likedLinkIds);
+                linksWithLikes = data || [];
             }
 
-            // Get curated links that should show in top10
+            // Get links with boost_score > 0 (even if no likes)
+            const { data: boostedLinks } = await supabase
+                .from('links')
+                .select('id, url, og_title, og_image, boost_score, user_id')
+                .gt('boost_score', 0);
+
+            // Merge both lists (avoid duplicates)
+            const allLinkIds = new Set<string>();
+            const userLinks: any[] = [];
+
+            linksWithLikes.forEach(link => {
+                if (!allLinkIds.has(link.id)) {
+                    allLinkIds.add(link.id);
+                    userLinks.push(link);
+                }
+            });
+
+            boostedLinks?.forEach(link => {
+                if (!allLinkIds.has(link.id)) {
+                    allLinkIds.add(link.id);
+                    userLinks.push(link);
+                }
+            });
+
+            // Get curated links with boost_score > 0 (instead of show_in_top10 flag)
             const { data: curatedTop10 } = await supabase
                 .from('curated_links')
                 .select('*')
-                .eq('show_in_top10', true);
+                .gt('boost_score', 0);
 
             // Combine and score
             const combinedData: (AdminLink & { source: 'user' | 'curated', totalScore: number })[] = [];
