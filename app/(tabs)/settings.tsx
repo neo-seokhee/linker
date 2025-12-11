@@ -1,22 +1,26 @@
 // Settings Page - Settings and account management
-import React, { useState } from 'react';
-import {
-    View,
-    Text,
-    ScrollView,
-    TouchableOpacity,
-    StyleSheet,
-    Switch,
-    Alert,
-    Platform,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CategoryManagementModal } from '@/components/CategoryManagementModal';
 import Colors from '@/constants/Colors';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import { useAuth } from '@/hooks/useAuth';
 import { useLinks } from '@/hooks/useLinks';
-import { CategoryManagementModal } from '@/components/CategoryManagementModal';
+import { useProfile } from '@/hooks/useProfile';
+import { supabase } from '@/utils/supabaseClient';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import React, { useState } from 'react';
+import {
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Mobile-first: max width 390px
 const MAX_WIDTH = 390;
@@ -26,12 +30,18 @@ export default function SettingsPage() {
     const colors = Colors[effectiveTheme];
     const insets = useSafeAreaInsets();
     const { links } = useLinks();
+    const { user, signOut } = useAuth();
+    const { profile, updateNickname, updateProfile, isLoading: profileLoading } = useProfile();
 
     const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
     const [showToast, setShowToast] = useState(false);
     const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
     const [confirmMessage, setConfirmMessage] = useState('');
+    const [isEditingProfile, setIsEditingProfile] = useState(false);
+    const [nicknameInput, setNicknameInput] = useState('');
+    const [avatarInput, setAvatarInput] = useState('');
+    const [isUploading, setIsUploading] = useState(false);
 
     const showToastNotification = (message: string) => {
         setToastMessage(message);
@@ -88,8 +98,120 @@ export default function SettingsPage() {
         );
     };
 
+    const handleLogout = () => {
+        showConfirmDialog(
+            '로그아웃하시겠습니까?',
+            async () => {
+                try {
+                    await signOut();
+                    showToastNotification('로그아웃되었습니다');
+                } catch (error) {
+                    showToastNotification('로그아웃 중 오류가 발생했습니다');
+                }
+            }
+        );
+    };
+
     const getThemeModeText = () => {
         return isDarkMode ? '다크 모드' : '라이트 모드';
+    };
+
+    // Get user display info
+    const getUserDisplayName = () => {
+        if (!user) return '로그인이 필요합니다';
+        return user.user_metadata?.name || user.user_metadata?.full_name || '사용자';
+    };
+
+    const getUserEmail = () => {
+        if (!user) return '로그인하면 다른 기기에서도 링크를 볼 수 있어요';
+        return user.email || '카카오 로그인';
+    };
+
+    const handleStartEditProfile = () => {
+        setNicknameInput(profile?.nickname || '');
+        setAvatarInput(profile?.avatarUrl || '');
+        setIsEditingProfile(true);
+    };
+
+    const pickImage = async () => {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+        });
+
+        if (!result.canceled) {
+            setAvatarInput(result.assets[0].uri);
+        }
+    };
+
+    const uploadAvatar = async (uri: string) => {
+        try {
+            const response = await fetch(uri);
+            const blob = await response.blob();
+            const fileExt = uri.split('.').pop()?.toLowerCase() ?? 'jpeg';
+            const fileName = `${user?.id}-${Date.now()}.${fileExt}`;
+            const filePath = `${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, blob);
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+            return data.publicUrl;
+        } catch (error) {
+            console.error('Error uploading avatar:', error);
+            throw error;
+        }
+    };
+
+    const handleSaveProfile = async () => {
+        if (!nicknameInput.trim()) {
+            showToastNotification('닉네임을 입력해주세요');
+            return;
+        }
+
+        setIsUploading(true);
+        try {
+            let finalAvatarUrl = avatarInput;
+
+            // If avatar input is a local file (from picker), upload it
+            if (avatarInput && (avatarInput.startsWith('file://') || avatarInput.startsWith('blob:'))) {
+                finalAvatarUrl = await uploadAvatar(avatarInput);
+            }
+
+            const success = await updateProfile({
+                nickname: nicknameInput.trim(),
+                avatarUrl: finalAvatarUrl?.trim() || undefined
+            });
+
+            if (success) {
+                showToastNotification('프로필이 변경되었습니다');
+                setIsEditingProfile(false);
+            } else {
+                showToastNotification('프로필 변경에 실패했습니다');
+            }
+        } catch (error: any) {
+            console.error('Profile save error:', error);
+            const message = error?.message || '업로드/저장 중 오류가 발생했습니다';
+
+            if (message.includes('bucket') || message.includes('not found')) {
+                showToastNotification('오류: 스토리지 버킷이 없습니다. SQL을 실행해주세요.');
+            } else {
+                showToastNotification('오류: ' + message);
+            }
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleCancelEditProfile = () => {
+        setIsEditingProfile(false);
+        setNicknameInput('');
+        setAvatarInput('');
     };
 
     const SettingItem = ({
@@ -145,25 +267,45 @@ export default function SettingsPage() {
                     <View style={styles.section}>
                         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>계정</Text>
 
-                        <View style={[styles.accountCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
-                                <Ionicons name="person" size={24} color="#000" />
-                            </View>
+                        <TouchableOpacity
+                            style={[styles.accountCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                            onPress={user ? handleStartEditProfile : undefined}
+                            activeOpacity={user ? 0.7 : 1}
+                        >
+                            {profile?.avatarUrl ? (
+                                <Image
+                                    source={{ uri: profile.avatarUrl }}
+                                    style={[styles.avatar, { backgroundColor: colors.border }]}
+                                />
+                            ) : (
+                                <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
+                                    <Ionicons name="person" size={24} color="#000" />
+                                </View>
+                            )}
                             <View style={styles.accountInfo}>
-                                <Text style={[styles.accountName, { color: colors.text }]}>로그인이 필요합니다</Text>
+                                <View style={styles.nicknameRow}>
+                                    <Text style={[styles.accountName, { color: colors.text }]}>
+                                        {profile?.nickname || getUserDisplayName()}
+                                    </Text>
+                                    {user && <Ionicons name="pencil" size={14} color={colors.textSecondary} style={{ marginLeft: 6 }} />}
+                                </View>
                                 <Text style={[styles.accountEmail, { color: colors.textSecondary }]}>
-                                    로그인하면 다른 기기에서도 링크를 볼 수 있어요
+                                    {getUserEmail()}
                                 </Text>
                             </View>
-                        </View>
-
-                        <TouchableOpacity
-                            style={[styles.loginButton, { backgroundColor: colors.accent }]}
-                            onPress={() => showToastNotification('로그인 기능은 추후 업데이트 예정입니다')}
-                        >
-                            <Text style={styles.loginButtonText}>로그인</Text>
                         </TouchableOpacity>
+
+                        {user && (
+                            <TouchableOpacity
+                                style={[styles.logoutButton, { borderColor: colors.border }]}
+                                onPress={handleLogout}
+                            >
+                                <Ionicons name="log-out-outline" size={18} color="#FF4444" />
+                                <Text style={styles.logoutButtonText}>로그아웃</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
+
 
                     {/* App Settings Section */}
                     <View style={styles.section}>
@@ -297,6 +439,79 @@ export default function SettingsPage() {
                         </View>
                     </View>
                 )}
+
+                {/* Profile Edit Modal */}
+                <Modal
+                    visible={isEditingProfile}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={handleCancelEditProfile}
+                >
+                    <View style={styles.confirmOverlay}>
+                        <View style={[styles.profileEditModal, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <Text style={[styles.confirmTitle, { color: colors.text, marginBottom: 20 }]}>프로필 수정</Text>
+
+                            {/* Avatar Preview & Selection */}
+                            <TouchableOpacity
+                                style={{ alignItems: 'center', marginBottom: 20 }}
+                                onPress={pickImage}
+                                activeOpacity={0.7}
+                            >
+                                {avatarInput ? (
+                                    <Image
+                                        source={{ uri: avatarInput }}
+                                        style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: colors.border }}
+                                    />
+                                ) : (
+                                    <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' }}>
+                                        <Ionicons name="camera" size={40} color="#000" />
+                                    </View>
+                                )}
+                                <View style={{
+                                    position: 'absolute',
+                                    bottom: 0,
+                                    right: 0,
+                                    left: 0,
+                                    alignItems: 'center'
+                                }}>
+                                    <View style={{ backgroundColor: colors.card, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '600', color: colors.text }}>사진 변경</Text>
+                                    </View>
+                                </View>
+                            </TouchableOpacity>
+
+                            {/* Nickname Input */}
+                            <View style={{ marginBottom: 20 }}>
+                                <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 6 }}>닉네임</Text>
+                                <TextInput
+                                    style={[styles.nicknameInput, { color: colors.text, borderColor: colors.border }]}
+                                    value={nicknameInput}
+                                    onChangeText={setNicknameInput}
+                                    placeholder="닉네임 입력"
+                                    placeholderTextColor={colors.textSecondary}
+                                />
+                            </View>
+
+                            {/* Buttons */}
+                            <View style={styles.confirmButtons}>
+                                <TouchableOpacity
+                                    style={[styles.confirmButton, { backgroundColor: colors.background }]}
+                                    onPress={handleCancelEditProfile}
+                                >
+                                    <Text style={[styles.confirmButtonText, { color: colors.text }]}>취소</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.confirmButton, { backgroundColor: colors.accent }]}
+                                    onPress={handleSaveProfile}
+                                >
+                                    <Text style={[styles.confirmButtonText, { color: '#000' }]}>
+                                        {isUploading ? '저장 중...' : '저장'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
             </View >
         </View >
     );
@@ -370,6 +585,20 @@ const styles = StyleSheet.create({
     },
     loginButtonText: {
         color: '#000',
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    logoutButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 12,
+        borderRadius: 10,
+        borderWidth: 1,
+    },
+    logoutButtonText: {
+        color: '#FF4444',
         fontSize: 15,
         fontWeight: '600',
     },
@@ -455,6 +684,13 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         padding: 20,
     },
+    profileEditModal: {
+        width: '90%',
+        maxWidth: 400,
+        borderRadius: 16,
+        borderWidth: 1,
+        padding: 24,
+    },
     confirmTitle: {
         fontSize: 18,
         fontWeight: '700',
@@ -478,5 +714,35 @@ const styles = StyleSheet.create({
     confirmButtonText: {
         fontSize: 14,
         fontWeight: '600',
+    },
+    nicknameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    nicknameEditContainer: {
+        gap: 8,
+    },
+    nicknameInput: {
+        fontSize: 16,
+        fontWeight: '700',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderRadius: 8,
+        minWidth: 150,
+    },
+    nicknameEditButtons: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    nicknameButton: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 6,
+    },
+    nicknameButtonText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#000',
     },
 });

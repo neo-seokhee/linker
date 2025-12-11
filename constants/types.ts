@@ -10,6 +10,7 @@ export interface Link {
     categoryId: string;
     createdAt: string;
     isFavorite: boolean;
+    isPublic: boolean; // For explore visibility
 }
 
 export interface Category {

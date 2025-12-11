@@ -1,4 +1,4 @@
-// Root Layout with LinksProvider and AppSettingsProvider
+// Root Layout with LinksProvider, AppSettingsProvider, and AuthProvider
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
@@ -7,12 +7,14 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { LinksProvider } from '@/hooks/useLinks';
+import { LoginScreen } from '@/components/LoginScreen';
 import { AppSettingsProvider, useAppSettings } from '@/hooks/useAppSettings';
+import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import { LinksProvider } from '@/hooks/useLinks';
 
 export {
   // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
+  ErrorBoundary
 } from 'expo-router';
 
 export const unstable_settings = {
@@ -46,13 +48,16 @@ export default function RootLayout() {
 
   return (
     <AppSettingsProvider>
-      <RootLayoutNav />
+      <AuthProvider>
+        <RootLayoutNav />
+      </AuthProvider>
     </AppSettingsProvider>
   );
 }
 
 function RootLayoutNav() {
   const { effectiveTheme } = useAppSettings();
+  const { user, isLoading } = useAuth();
 
   // Custom dark theme with cyan accent
   const LinkerDarkTheme = {
@@ -75,14 +80,25 @@ function RootLayoutNav() {
     },
   };
 
+  // Show login screen if not authenticated
+  if (!isLoading && !user) {
+    return (
+      <ThemeProvider value={effectiveTheme === 'dark' ? LinkerDarkTheme : LinkerLightTheme}>
+        <LoginScreen />
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider value={effectiveTheme === 'dark' ? LinkerDarkTheme : LinkerLightTheme}>
       <LinksProvider>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="admin" options={{ headerShown: false }} />
         </Stack>
       </LinksProvider>
     </ThemeProvider>
   );
 }
+

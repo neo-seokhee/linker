@@ -1,25 +1,25 @@
 // AddLinkModal component - Modal for adding new links with category suggestion
-import React, { useState, useEffect } from 'react';
+import Colors from '@/constants/Colors';
+import { Category } from '@/constants/types';
+import { useAppSettings } from '@/hooks/useAppSettings';
+import { useLinks } from '@/hooks/useLinks';
+import { getMatchingCategories, suggestCategory } from '@/utils/categoryMatcher';
+import { fetchOGData, isValidUrl, normalizeUrl, OGData } from '@/utils/ogParser';
+import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
 import {
-    View,
+    ActivityIndicator,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    Modal,
-    StyleSheet,
-    ActivityIndicator,
-    ScrollView,
-    KeyboardAvoidingView,
-    Platform,
-    Image,
+    View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import Colors from '@/constants/Colors';
-import { Category } from '@/constants/types';
-import { useLinks } from '@/hooks/useLinks';
-import { useAppSettings } from '@/hooks/useAppSettings';
-import { fetchOGData, isValidUrl, normalizeUrl, OGData } from '@/utils/ogParser';
-import { suggestCategory, getMatchingCategories } from '@/utils/categoryMatcher';
 
 const EMOJI_LIST = ['📁', '📰', '🛒', '📖', '💼', '🎮', '🎵', '🎬', '📷', '✈️', '🍔', '💡', '🔧', '📱', '💻'];
 
@@ -36,7 +36,7 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
     const [url, setUrl] = useState('');
     const [customTitle, setCustomTitle] = useState(''); // User-editable title
     const [ogData, setOgData] = useState<OGData | null>(null);
-    const [selectedCategory, setSelectedCategory] = useState<string>('articles');
+    const [selectedCategory, setSelectedCategory] = useState<string>(''); // empty = will use uncategorized in addLink
     const [suggestedCategories, setSuggestedCategories] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -46,13 +46,17 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
     const [newCategoryName, setNewCategoryName] = useState('');
     const [selectedEmoji, setSelectedEmoji] = useState('📁');
 
+    // Public/Private toggle (default: public)
+    const [isPublic, setIsPublic] = useState(true);
+
+
     // Reset state when modal closes
     useEffect(() => {
         if (!visible) {
             setUrl('');
             setCustomTitle('');
             setOgData(null);
-            setSelectedCategory('articles');
+            setSelectedCategory(''); // empty = will use uncategorized in addLink
             setSuggestedCategories([]);
             setIsLoading(false);
             setError(null);
@@ -114,6 +118,7 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
             ogDescription: ogData.description,
             categoryId: selectedCategory,
             isFavorite: false,
+            isPublic: isPublic,
         });
 
         onClose();
@@ -286,7 +291,11 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
                                 {/* All Categories + Add Button */}
                                 <View style={styles.categoryChips}>
                                     {categories
-                                        .filter((c) => c.id !== 'favorites')
+                                        .filter((c) =>
+                                            c.id !== '00000000-0000-0000-0000-000000000001' && // favorites
+                                            c.id !== '00000000-0000-0000-0000-000000000005'    // uncategorized (hidden)
+                                        )
+
                                         .map((cat) => (
                                             <TouchableOpacity
                                                 key={cat.id}
@@ -367,6 +376,39 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
                                     </View>
                                 )}
                             </>
+                        )}
+
+                        {/* Public/Private Toggle */}
+                        {ogData && (
+                            <View style={[styles.publicToggleContainer, { borderColor: colors.border }]}>
+                                <View style={styles.publicToggleContent}>
+                                    <Ionicons
+                                        name={isPublic ? 'globe-outline' : 'lock-closed-outline'}
+                                        size={20}
+                                        color={colors.text}
+                                    />
+                                    <View style={styles.publicToggleText}>
+                                        <Text style={[styles.publicToggleTitle, { color: colors.text }]}>
+                                            {isPublic ? '공개' : '비공개'}
+                                        </Text>
+                                        <Text style={[styles.publicToggleDesc, { color: colors.textSecondary }]}>
+                                            {isPublic ? '탐색 탭에 표시됩니다' : '나만 볼 수 있습니다'}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.toggleSwitch,
+                                        { backgroundColor: isPublic ? colors.accent : colors.border }
+                                    ]}
+                                    onPress={() => setIsPublic(!isPublic)}
+                                >
+                                    <View style={[
+                                        styles.toggleKnob,
+                                        { transform: [{ translateX: isPublic ? 20 : 0 }] }
+                                    ]} />
+                                </TouchableOpacity>
+                            </View>
                         )}
 
                         <View style={{ height: 100 }} />
@@ -582,6 +624,41 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    publicToggleContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 16,
+        borderTopWidth: 1,
+        marginTop: 16,
+    },
+    publicToggleContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    publicToggleText: {
+        gap: 2,
+    },
+    publicToggleTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    publicToggleDesc: {
+        fontSize: 12,
+    },
+    toggleSwitch: {
+        width: 50,
+        height: 30,
+        borderRadius: 15,
+        padding: 3,
+    },
+    toggleKnob: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#FFFFFF',
     },
 });
 

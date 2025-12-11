@@ -1,23 +1,26 @@
 // Enhanced Explore Tab with Ranking Animations, Carousel, Filters, and Sticky Header
-import React, { useState, useEffect, useRef } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    TouchableOpacity,
-    Image,
-    Modal,
-    Animated,
-    Linking,
-    Platform,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// Last updated: 2025-12-10T16:11:00 - Connected to live data
+import { ScreenHeader } from '@/components/ScreenHeader';
 import Colors from '@/constants/Colors';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import { useExplore } from '@/hooks/useExplore';
 import { useLinks } from '@/hooks/useLinks';
-import { ScreenHeader } from '@/components/ScreenHeader';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    Animated,
+    Image,
+    Linking,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Types
 interface ExploreFeedItem {
@@ -44,6 +47,7 @@ interface Top10Item {
     category: string;
     rankChange: 'up' | 'down' | 'new' | 'same';
     rankDelta?: number;
+    isLiked?: boolean; // Added to track like state
 }
 
 // Auto-categorize based on URL domain and keywords
@@ -64,83 +68,17 @@ const autoCategorize = (url: string, title: string): string => {
     return '일반';
 };
 
-// Dummy data with rank changes
-const TOP_10_DATA: Top10Item[] = [
-    { id: 'top-1', rank: 1, title: 'ChatGPT 활용 가이드', url: 'https://openai.com/blog/chatgpt', thumbnail: 'https://picsum.photos/seed/top1/200/200', description: 'ChatGPT를 100% 활용하는 방법을 알아봅시다.', likes: 2340, category: 'AI', rankChange: 'up', rankDelta: 2 },
-    { id: 'top-2', rank: 2, title: 'React 19 새로운 기능', url: 'https://react.dev/blog', thumbnail: 'https://picsum.photos/seed/top2/200/200', description: 'React 19의 흥미로운 신기능 분석.', likes: 1890, category: '개발', rankChange: 'down', rankDelta: 1 },
-    { id: 'top-3', rank: 3, title: '2025 디자인 트렌드', url: 'https://dribbble.com/stories', thumbnail: 'https://picsum.photos/seed/top3/200/200', description: '다가오는 2025년의 디자인 핵심 트렌드.', likes: 1650, category: '디자인', rankChange: 'same' },
-    { id: 'top-4', rank: 4, title: '건강한 아침 루틴', url: 'https://medium.com/health', thumbnail: 'https://picsum.photos/seed/top4/200/200', description: '활기찬 하루를 위한 모닝 루틴.', likes: 1420, category: '라이프', rankChange: 'up', rankDelta: 3 },
-    { id: 'top-5', rank: 5, title: 'TypeScript 마스터하기', url: 'https://www.typescriptlang.org/docs', thumbnail: 'https://picsum.photos/seed/top5/200/200', description: '타입스크립트 고수가 되는 지름길.', likes: 1280, category: '개발', rankChange: 'new' },
-    { id: 'top-6', rank: 6, title: '미니멀 인테리어 팁', url: 'https://houzz.com', thumbnail: 'https://picsum.photos/seed/top6/200/200', description: '작은 집을 넓게 쓰는 인테리어 팁.', likes: 1150, category: '인테리어', rankChange: 'down', rankDelta: 2 },
-    { id: 'top-7', rank: 7, title: '효율적인 시간 관리법', url: 'https://todoist.com/productivity', thumbnail: 'https://picsum.photos/seed/top7/200/200', description: 'GTD 방법론을 활용한 시간 관리.', likes: 980, category: '생산성', rankChange: 'up', rankDelta: 1 },
-    { id: 'top-8', rank: 8, title: '유럽 여행 가이드', url: 'https://lonelyplanet.com', thumbnail: 'https://picsum.photos/seed/top8/200/200', description: '꼭 가봐야 할 유럽 여행지 베스트.', likes: 890, category: '여행', rankChange: 'same' },
-    { id: 'top-9', rank: 9, title: '주식 투자 기초', url: 'https://investopedia.com', thumbnail: 'https://picsum.photos/seed/top9/200/200', description: '초보자를 위한 주식 투자 입문.', likes: 750, category: '재테크', rankChange: 'down', rankDelta: 1 },
-    { id: 'top-10', rank: 10, title: '홈트레이닝 루틴', url: 'https://nike.com', thumbnail: 'https://picsum.photos/seed/top10/200/200', description: '집에서 할 수 있는 전신 운동.', likes: 680, category: '운동', rankChange: 'up', rankDelta: 4 },
-];
+// Empty data - will be populated from Supabase after SQL migration
+const TOP_10_DATA: Top10Item[] = [];
 
-const FEATURED_DATA: ExploreFeedItem[] = [
-    {
-        id: 'featured-1',
-        url: 'https://example.com/react-19',
-        title: 'React 19의 새로운 기능들',
-        thumbnail: 'https://picsum.photos/seed/featured1/400/200',
-        description: 'React 19에서 추가된 혁신적인 기능들을 알아봅니다',
-        username: 'reactdev',
-        userAvatar: 'https://i.pravatar.cc/150?img=1',
-        likes: 1234,
-        autoCategory: '개발',
-        isLiked: false,
-    },
-    {
-        id: 'featured-2',
-        url: 'https://example.com/design-trends',
-        title: '2025 UI/UX 디자인 트렌드',
-        thumbnail: 'https://picsum.photos/seed/featured2/400/200',
-        description: '올해 주목해야 할 디자인 트렌드',
-        username: 'designguru',
-        userAvatar: 'https://i.pravatar.cc/150?img=2',
-        likes: 987,
-        autoCategory: '디자인',
-        isLiked: false,
-    },
-    {
-        id: 'featured-3',
-        url: 'https://example.com/productivity',
-        title: '생산성을 높이는 10가지 방법',
-        thumbnail: 'https://picsum.photos/seed/featured3/400/200',
-        description: '효율적인 업무를 위한 실용적인 팁',
-        username: 'productivity',
-        userAvatar: 'https://i.pravatar.cc/150?img=3',
-        likes: 756,
-        autoCategory: '생산성',
-        isLiked: false,
-    },
-];
+// Empty featured data - admin will manage via /admin page
+const FEATURED_DATA: ExploreFeedItem[] = [];
 
 const CATEGORIES = ['전체', '개발', '디자인', '영상', '블로그', '뉴스', '요리', '여행', '음악', '일반'];
 
+// Generate empty feed - will be populated from live data
 const generateFeedData = (startIndex: number, count: number): ExploreFeedItem[] => {
-    const items: ExploreFeedItem[] = [];
-    const categories = ['개발', '디자인', '영상', '블로그', '뉴스', '요리', '여행', '음악', '일반'];
-
-    for (let i = 0; i < count; i++) {
-        const index = startIndex + i;
-        const category = categories[index % categories.length];
-
-        items.push({
-            id: `feed-${index}`,
-            url: `https://example.com/link-${index}`,
-            title: `${category} 관련 흥미로운 링크 #${index + 1}`,
-            thumbnail: `https://picsum.photos/seed/${index}/400/300`,
-            description: `이것은 ${index + 1}번째 피드 아이템입니다.`,
-            username: `user${(index % 10) + 1}`,
-            userAvatar: `https://i.pravatar.cc/150?img=${(index % 70) + 1}`,
-            likes: Math.floor(Math.random() * 1000) + 100,
-            autoCategory: category,
-            isLiked: false,
-        });
-    }
-    return items;
+    return []; // Return empty array - no more dummy data
 };
 
 export default function ExploreScreen() {
@@ -149,9 +87,61 @@ export default function ExploreScreen() {
     const colors = Colors[effectiveTheme];
     const { addLink, categories } = useLinks();
 
+    // Use live explore data from Supabase
+    const { feedData: liveFeeds, top10Data: liveTop10, featuredData: liveFeatured, isLoading: exploreLoading, loadMoreFeed, toggleLike, refreshData } = useExplore();
+
+    // Refresh data when tab comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            refreshData();
+        }, [refreshData])
+    );
+
+    // Convert ExploreLink to ExploreFeedItem for UI compatibility
+    const feedData: ExploreFeedItem[] = liveFeeds.map(link => ({
+        id: link.id,
+        url: link.url,
+        title: link.title,
+        thumbnail: link.thumbnail,
+        description: link.description,
+        username: link.userNickname || 'user',
+        userAvatar: `https://i.pravatar.cc/150?u=${link.userId}`,
+        likes: link.likes,
+        autoCategory: link.category,
+        isLiked: link.isLiked,
+    }));
+
+    // Convert top10 data for UI
+    const TOP_10_DATA: Top10Item[] = liveTop10.map(link => ({
+        id: link.id,
+        rank: link.rank,
+        title: link.title,
+        url: link.url,
+        thumbnail: link.thumbnail,
+        description: link.description,
+        likes: link.likes,
+        category: link.category,
+        rankChange: link.rankChange,
+        rankDelta: link.rankDelta,
+        isLiked: link.isLiked, // Include isLiked from source data
+    }));
+
+    // Convert featured data for UI
+    const FEATURED_DATA: ExploreFeedItem[] = liveFeatured.map(link => ({
+        id: link.id,
+        url: link.url,
+        title: link.title,
+        thumbnail: link.thumbnail,
+        description: link.description,
+        username: link.userNickname || 'featured',
+        userAvatar: `https://i.pravatar.cc/150?u=${link.userId}`,
+        likes: link.likes,
+        autoCategory: link.category,
+        isLiked: link.isLiked,
+    }));
+
     const [top10Expanded, setTop10Expanded] = useState(false);
     const [currentTop10Index, setCurrentTop10Index] = useState(0);
-    const [feedData, setFeedData] = useState<ExploreFeedItem[]>(generateFeedData(0, 10));
     const [likedItems, setLikedItems] = useState<Set<string>>(new Set());
     const [selectedSaveItem, setSelectedSaveItem] = useState<ExploreFeedItem | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -159,12 +149,14 @@ export default function ExploreScreen() {
     const [featuredIndex, setFeaturedIndex] = useState(0);
     const [isTop10Sticky, setIsTop10Sticky] = useState(false);
 
+
     const scrollViewRef = useRef<ScrollView>(null);
     const fadeAnim = useRef(new Animated.Value(1)).current;
 
     // Auto-scroll Top 10 every 3 seconds with fade animation
     useEffect(() => {
         if (top10Expanded) return;
+        if (TOP_10_DATA.length === 0) return; // Don't auto-scroll if no data
 
         const interval = setInterval(() => {
             Animated.sequence([
@@ -180,22 +172,18 @@ export default function ExploreScreen() {
                 }),
             ]).start();
 
-            setCurrentTop10Index((prev) => (prev + 1) % TOP_10_DATA.length);
+            setCurrentTop10Index((prev) => {
+                if (TOP_10_DATA.length === 0) return 0;
+                return (prev + 1) % TOP_10_DATA.length;
+            });
         }, 3000);
 
         return () => clearInterval(interval);
     }, [top10Expanded]);
 
+    // Use toggleLike from useExplore hook to save likes to Supabase
     const handleLike = (itemId: string) => {
-        setLikedItems(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(itemId)) {
-                newSet.delete(itemId);
-            } else {
-                newSet.add(itemId);
-            }
-            return newSet;
-        });
+        toggleLike(itemId);
     };
 
     const handleSave = (item: ExploreFeedItem) => {
@@ -212,6 +200,7 @@ export default function ExploreScreen() {
             ogDescription: selectedSaveItem.description,
             categoryId: selectedCategory,
             isFavorite: false,
+            isPublic: true,
         });
 
         setSelectedSaveItem(null);
@@ -220,8 +209,8 @@ export default function ExploreScreen() {
     };
 
     const loadMore = () => {
-        const newData = generateFeedData(feedData.length, 10);
-        setFeedData([...feedData, ...newData]);
+        // Use loadMoreFeed from useExplore hook
+        loadMoreFeed();
     };
 
     const filteredFeedData = filterCategory === '전체'
@@ -269,13 +258,22 @@ export default function ExploreScreen() {
     };
 
     const renderFeedItem = (item: ExploreFeedItem, isCarousel: boolean = false) => {
-        const isLiked = likedItems.has(item.id);
+        const isLiked = item.isLiked; // Use isLiked from data, not local state
+
+        const handleOpenLink = () => {
+            Linking.openURL(item.url);
+        };
 
         return (
-            <View key={item.id} style={[
-                isCarousel ? styles.carouselItem : styles.feedItem,
-                { backgroundColor: colors.card, borderColor: colors.border }
-            ]}>
+            <TouchableOpacity
+                key={item.id}
+                style={[
+                    isCarousel ? styles.carouselItem : styles.feedItem,
+                    { backgroundColor: colors.card, borderColor: colors.border }
+                ]}
+                onPress={handleOpenLink}
+                activeOpacity={0.8}
+            >
                 <Image source={{ uri: item.thumbnail }} style={styles.feedThumbnail} />
 
                 <View style={styles.feedContent}>
@@ -320,7 +318,7 @@ export default function ExploreScreen() {
                         </View>
                     </View>
                 </View>
-            </View>
+            </TouchableOpacity>
         );
     };
 
@@ -377,9 +375,9 @@ export default function ExploreScreen() {
                                         onPress={() => handleLike(item.id)}
                                     >
                                         <Ionicons
-                                            name={likedItems.has(item.id) ? 'heart' : 'heart-outline'}
+                                            name={likedItems.has(item.id) || item.isLiked ? 'heart' : 'heart-outline'}
                                             size={16}
-                                            color={likedItems.has(item.id) ? colors.accent : colors.textSecondary}
+                                            color={likedItems.has(item.id) || item.isLiked ? colors.accent : colors.textSecondary}
                                         />
                                     </TouchableOpacity>
                                     <TouchableOpacity
@@ -402,7 +400,7 @@ export default function ExploreScreen() {
                             </View>
                         ))}
                     </ScrollView>
-                ) : (
+                ) : TOP_10_DATA.length > 0 ? (
                     <Animated.View style={[styles.top10Compact, { opacity: fadeAnim }]}>
                         <View style={[styles.top10CompactInner, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <TouchableOpacity
@@ -428,7 +426,12 @@ export default function ExploreScreen() {
                             </View>
                         </View>
                     </Animated.View>
+                ) : (
+                    <View style={[styles.top10CompactInner, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 13 }}>아직 인기 링크가 없습니다</Text>
+                    </View>
                 )}
+
             </View>
 
             <ScrollView
@@ -454,34 +457,44 @@ export default function ExploreScreen() {
                     <View style={styles.sectionTitleContainer}>
                         <Text style={[styles.sectionTitle, { color: colors.text }]}>추천 링크</Text>
                     </View>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        snapToInterval={336} // 320 + 16 (margin)
-                        decelerationRate="fast"
-                        snapToAlignment="start"
-                        onMomentumScrollEnd={(event) => {
-                            const index = Math.round(event.nativeEvent.contentOffset.x / 336);
-                            setFeaturedIndex(index);
-                        }}
-                        contentContainerStyle={styles.featuredCarouselContent}
-                    >
-                        {FEATURED_DATA.map((item) => renderFeedItem(item, true))}
-                    </ScrollView>
-                    <View style={styles.carouselDots}>
-                        {FEATURED_DATA.map((_, index) => (
-                            <View
-                                key={index}
-                                style={[
-                                    styles.dot,
-                                    {
-                                        backgroundColor: index === featuredIndex ? colors.accent : colors.border,
-                                        width: index === featuredIndex ? 20 : 6,
-                                    }
-                                ]}
-                            />
-                        ))}
-                    </View>
+                    {FEATURED_DATA.length > 0 ? (
+                        <>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                snapToInterval={336} // 320 + 16 (margin)
+                                decelerationRate="fast"
+                                snapToAlignment="start"
+                                onMomentumScrollEnd={(event) => {
+                                    const index = Math.round(event.nativeEvent.contentOffset.x / 336);
+                                    setFeaturedIndex(index);
+                                }}
+                                contentContainerStyle={styles.featuredCarouselContent}
+                            >
+                                {FEATURED_DATA.map((item) => renderFeedItem(item, true))}
+                            </ScrollView>
+                            <View style={styles.carouselDots}>
+                                {FEATURED_DATA.map((_, index) => (
+                                    <View
+                                        key={index}
+                                        style={[
+                                            styles.dot,
+                                            {
+                                                backgroundColor: index === featuredIndex ? colors.accent : colors.border,
+                                                width: index === featuredIndex ? 20 : 6,
+                                            }
+                                        ]}
+                                    />
+                                ))}
+                            </View>
+                        </>
+                    ) : (
+                        <View style={{ paddingHorizontal: 20, paddingVertical: 30 }}>
+                            <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center' }}>
+                                추천 링크가 아직 없습니다
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Feed Section with Category Filter */}
@@ -519,8 +532,17 @@ export default function ExploreScreen() {
                     </ScrollView>
 
                     {/* Feed Items */}
-                    {filteredFeedData.map((item) => renderFeedItem(item))}
+                    {filteredFeedData.length > 0 ? (
+                        filteredFeedData.map((item) => renderFeedItem(item))
+                    ) : (
+                        <View style={{ paddingHorizontal: 20, paddingVertical: 40 }}>
+                            <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center' }}>
+                                링크 피드가 아직 없습니다
+                            </Text>
+                        </View>
+                    )}
                 </View>
+
 
                 <View style={{ height: 40 }} />
             </ScrollView>

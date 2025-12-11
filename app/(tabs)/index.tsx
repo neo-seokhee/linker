@@ -1,26 +1,23 @@
 // Storage Page - Main tab showing all saved links by category
-import React, { useState, useCallback } from 'react';
+import { AddLinkModal } from '@/components/AddLinkModal';
+import { CategorySection } from '@/components/CategorySection';
+import { FloatingButton } from '@/components/FloatingButton';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import Colors from '@/constants/Colors';
+import { Link } from '@/constants/types';
+import { useAppSettings } from '@/hooks/useAppSettings';
+import { useLinks } from '@/hooks/useLinks';
+import { useCallback, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  RefreshControl,
   ActivityIndicator,
   Linking,
   Platform,
-  TouchableOpacity,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Colors from '@/constants/Colors';
-import { Link } from '@/constants/types';
-import { useLinks } from '@/hooks/useLinks';
-import { useAppSettings } from '@/hooks/useAppSettings';
-import { CategorySection } from '@/components/CategorySection';
-import { FloatingButton } from '@/components/FloatingButton';
-import { AddLinkModal } from '@/components/AddLinkModal';
-import { ScreenHeader } from '@/components/ScreenHeader';
 
 // Mobile-first: max width 390px (iPhone 14 width)
 const MAX_WIDTH = 390;
@@ -80,6 +77,12 @@ export default function StoragePage() {
         >
           {categories.map((category) => {
             const links = getLinksForCategory(category.id);
+
+            // Hide uncategorized category if it has no links
+            if (category.id === '00000000-0000-0000-0000-000000000005' && links.length === 0) {
+              return null;
+            }
+
             return (
               <CategorySection
                 key={category.id}
@@ -88,6 +91,7 @@ export default function StoragePage() {
                 onLinkPress={handleLinkPress}
                 onFavoriteToggle={toggleFavorite}
               />
+
             );
           })}
 

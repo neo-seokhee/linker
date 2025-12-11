@@ -1,12 +1,17 @@
 // Category matching utility for auto-categorization
 import { Category, DEFAULT_CATEGORIES } from '@/constants/types';
 
+// Category UUIDs (must match database)
+const CATEGORY_FAVORITES = '00000000-0000-0000-0000-000000000001';
+const CATEGORY_ARTICLES = '00000000-0000-0000-0000-000000000004';
+const CATEGORY_UNCATEGORIZED = '00000000-0000-0000-0000-000000000005';
+
 /**
  * Suggests a category based on the OG title and URL
  * @param ogTitle - The OG title of the link
  * @param url - The URL of the link
  * @param categories - Available categories
- * @returns Suggested category ID or 'articles' as default
+ * @returns Suggested category ID (UUID) or uncategorized as default
  */
 export function suggestCategory(
     ogTitle: string,
@@ -15,9 +20,9 @@ export function suggestCategory(
 ): string {
     const searchText = `${ogTitle} ${url}`.toLowerCase();
 
-    // Check each category's keywords (skip favorites)
+    // Check each category's keywords (skip favorites and uncategorized)
     for (const category of categories) {
-        if (category.id === 'favorites') continue;
+        if (category.id === CATEGORY_FAVORITES || category.id === CATEGORY_UNCATEGORIZED) continue;
 
         for (const keyword of category.keywords) {
             if (searchText.includes(keyword.toLowerCase())) {
@@ -26,8 +31,8 @@ export function suggestCategory(
         }
     }
 
-    // Default to articles if no match
-    return 'articles';
+    // Default to uncategorized if no match (empty string triggers uncategorized in addLink)
+    return '';
 }
 
 /**
@@ -46,7 +51,8 @@ export function getMatchingCategories(
     const matches: { id: string; score: number }[] = [];
 
     for (const category of categories) {
-        if (category.id === 'favorites') continue;
+        // Skip favorites and uncategorized
+        if (category.id === CATEGORY_FAVORITES || category.id === CATEGORY_UNCATEGORIZED) continue;
 
         let score = 0;
         for (const keyword of category.keywords) {
