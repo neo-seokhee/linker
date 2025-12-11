@@ -1,8 +1,8 @@
 // Tab Layout - Bottom navigation with 보관 and 설정 tabs
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import Colors from '@/constants/Colors';
 import { useAppSettings } from '@/hooks/useAppSettings';
@@ -20,6 +20,23 @@ function TabBarIcon(props: {
 export default function TabLayout() {
   const { effectiveTheme } = useAppSettings();
   const colors = Colors[effectiveTheme];
+  const pathname = usePathname();
+  const router = useRouter();
+
+  // Sync tab state with URL on web refresh
+  React.useEffect(() => {
+    if (Platform.OS === 'web') {
+      // Get current path from window.location
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+
+      // Force navigation to correct tab based on URL
+      if (currentPath.includes('/storage') && !pathname.includes('storage')) {
+        router.replace('/(tabs)/storage' as any);
+      } else if (currentPath.includes('/settings') && !pathname.includes('settings')) {
+        router.replace('/(tabs)/settings' as any);
+      }
+    }
+  }, []);
 
   return (
     <View style={[styles.outerContainer, { backgroundColor: colors.background }]}>
