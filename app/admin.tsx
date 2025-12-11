@@ -45,6 +45,8 @@ interface CuratedLink {
     title: string;
     thumbnail: string | null;
     description: string | null;
+    nickname: string | null;
+    profile_image: string | null;
     show_in_feed: boolean;
     show_in_featured: boolean;
     show_in_top10: boolean;
@@ -74,6 +76,8 @@ export default function AdminPage() {
     const [newCuratedUrl, setNewCuratedUrl] = useState('');
     const [newCuratedTitle, setNewCuratedTitle] = useState('');
     const [newCuratedThumbnail, setNewCuratedThumbnail] = useState('');
+    const [newCuratedNickname, setNewCuratedNickname] = useState('');
+    const [newCuratedProfileImage, setNewCuratedProfileImage] = useState('');
     const [newCuratedCategory, setNewCuratedCategory] = useState('일반');
     const [newCuratedBoost, setNewCuratedBoost] = useState('0');
     const [showInFeed, setShowInFeed] = useState(true);
@@ -261,6 +265,8 @@ export default function AdminPage() {
             url: newCuratedUrl.trim(),
             title: newCuratedTitle.trim(),
             thumbnail: newCuratedThumbnail.trim() || null,
+            nickname: newCuratedNickname.trim() || null,
+            profile_image: newCuratedProfileImage.trim() || null,
             category: newCuratedCategory,
             boost_score: parseInt(newCuratedBoost) || 0,
             show_in_feed: showInFeed,
@@ -275,6 +281,8 @@ export default function AdminPage() {
             setNewCuratedUrl('');
             setNewCuratedTitle('');
             setNewCuratedThumbnail('');
+            setNewCuratedNickname('');
+            setNewCuratedProfileImage('');
             setNewCuratedBoost('0');
             setShowInFeed(true);
             setShowInFeatured(false);
@@ -631,6 +639,26 @@ export default function AdminPage() {
                                 </View>
                             </View>
                             <View style={styles.linkActions}>
+                                <View style={styles.boostInputSmall}>
+                                    <TextInput
+                                        style={[styles.boostFieldSmall, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                                        value={String(link.boost_score || 0)}
+                                        keyboardType="number-pad"
+                                        placeholder="🚀"
+                                        onChangeText={(val) => {
+                                            const newScore = parseInt(val) || 0;
+                                            setLinks(prev => prev.map(l =>
+                                                l.id === link.id ? { ...l, boost_score: newScore } : l
+                                            ));
+                                        }}
+                                        onBlur={() => {
+                                            supabase.from('links').update({ boost_score: link.boost_score || 0 }).eq('id', link.id)
+                                                .then(({ error }) => {
+                                                    if (error) alert('저장 실패: ' + error.message);
+                                                });
+                                        }}
+                                    />
+                                </View>
                                 <TouchableOpacity
                                     style={[styles.actionButton, { backgroundColor: link.is_featured ? colors.accent : colors.border }]}
                                     onPress={() => toggleFeatured(link.id, link.is_featured)}
@@ -760,6 +788,20 @@ export default function AdminPage() {
                     placeholderTextColor={colors.textSecondary}
                     value={newCuratedThumbnail}
                     onChangeText={setNewCuratedThumbnail}
+                />
+                <TextInput
+                    style={[styles.formInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                    placeholder="유저 닉네임 (선택)"
+                    placeholderTextColor={colors.textSecondary}
+                    value={newCuratedNickname}
+                    onChangeText={setNewCuratedNickname}
+                />
+                <TextInput
+                    style={[styles.formInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                    placeholder="유저 프로필 이미지 URL (선택)"
+                    placeholderTextColor={colors.textSecondary}
+                    value={newCuratedProfileImage}
+                    onChangeText={setNewCuratedProfileImage}
                 />
                 <View style={styles.formRow}>
                     <Text style={[styles.formLabel, { color: colors.text }]}>Boost 가중치:</Text>
@@ -1323,5 +1365,17 @@ const styles = StyleSheet.create({
     },
     boostBadge: {
         fontSize: 11,
+    },
+    boostInputSmall: {
+        width: 50,
+        marginRight: 4,
+    },
+    boostFieldSmall: {
+        width: 50,
+        height: 32,
+        borderRadius: 6,
+        borderWidth: 1,
+        textAlign: 'center',
+        fontSize: 12,
     },
 });

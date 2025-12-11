@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS curated_links (
     thumbnail TEXT,
     description TEXT,
     
+    -- User profile info (for display)
+    nickname TEXT,
+    profile_image TEXT,
+    
     -- Display settings
     show_in_feed BOOLEAN DEFAULT TRUE,
     show_in_featured BOOLEAN DEFAULT FALSE,
@@ -37,12 +41,20 @@ DROP POLICY IF EXISTS "Anyone can read curated_links" ON curated_links;
 CREATE POLICY "Anyone can read curated_links" ON curated_links 
     FOR SELECT USING (true);
 
--- Only admins can insert/update/delete curated links
-DROP POLICY IF EXISTS "Admins can manage curated_links" ON curated_links;
-CREATE POLICY "Admins can manage curated_links" ON curated_links 
-    FOR ALL USING (
-        EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid())
-    );
+-- Authenticated users can insert curated links (admin page is password protected)
+DROP POLICY IF EXISTS "Authenticated users can insert curated_links" ON curated_links;
+CREATE POLICY "Authenticated users can insert curated_links" ON curated_links 
+    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+
+-- Authenticated users can update curated links
+DROP POLICY IF EXISTS "Authenticated users can update curated_links" ON curated_links;
+CREATE POLICY "Authenticated users can update curated_links" ON curated_links 
+    FOR UPDATE USING (auth.uid() IS NOT NULL);
+
+-- Authenticated users can delete curated links
+DROP POLICY IF EXISTS "Authenticated users can delete curated_links" ON curated_links;
+CREATE POLICY "Authenticated users can delete curated_links" ON curated_links 
+    FOR DELETE USING (auth.uid() IS NOT NULL);
 
 -- 5. Create index for efficient queries
 CREATE INDEX IF NOT EXISTS idx_curated_links_feed ON curated_links(show_in_feed) WHERE show_in_feed = TRUE;
