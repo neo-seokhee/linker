@@ -249,15 +249,10 @@ export function useExplore(): UseExploreReturn {
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
             // Get 7-day likes
-            const { data: recentFavorites, error } = await supabase
+            const { data: recentFavorites } = await supabase
                 .from('favorite_history')
                 .select('link_id')
                 .gte('favorited_at', sevenDaysAgo.toISOString());
-
-            if (error) {
-                console.log('favorite_history table not found, skipping top 10');
-                return [];
-            }
 
             // Count by link_id
             const likeCountMap: Record<string, number> = {};
@@ -267,16 +262,42 @@ export function useExplore(): UseExploreReturn {
                 });
             }
 
-            // Get user links with boost_score
-            const userLinkIds = Object.keys(likeCountMap);
-            let userLinks: any[] = [];
-            if (userLinkIds.length > 0) {
+            // Get ALL links that either have likes OR have boost_score > 0
+            const likedLinkIds = Object.keys(likeCountMap);
+
+            // Get links with likes
+            let linksWithLikes: any[] = [];
+            if (likedLinkIds.length > 0) {
                 const { data } = await supabase
                     .from('links')
-                    .select('*, boost_score')
-                    .in('id', userLinkIds);
-                userLinks = data || [];
+                    .select('*')
+                    .in('id', likedLinkIds);
+                linksWithLikes = data || [];
             }
+
+            // Get links with boost_score > 0 (even if no likes)
+            const { data: boostedLinks } = await supabase
+                .from('links')
+                .select('*')
+                .gt('boost_score', 0);
+
+            // Merge both lists (avoid duplicates)
+            const allLinkIds = new Set<string>();
+            const allUserLinks: any[] = [];
+
+            linksWithLikes.forEach(link => {
+                if (!allLinkIds.has(link.id)) {
+                    allLinkIds.add(link.id);
+                    allUserLinks.push(link);
+                }
+            });
+
+            boostedLinks?.forEach(link => {
+                if (!allLinkIds.has(link.id)) {
+                    allLinkIds.add(link.id);
+                    allUserLinks.push(link);
+                }
+            });
 
             // Get curated links that should show in top10
             const { data: curatedLinks } = await supabase
@@ -284,19 +305,26 @@ export function useExplore(): UseExploreReturn {
                 .select('*')
                 .eq('show_in_top10', true);
 
+            // Get profiles for user links
+            const userIds = allUserLinks.map(l => l.user_id).filter(Boolean);
+            const profileMap = await getProfilesByUserIds(userIds);
+
             // Combine all links with scores
-            type ScoredItem = { link: any; source: 'user' | 'curated'; totalScore: number; likes: number };
+            type ScoredItem = { link: any; source: 'user' | 'curated'; totalScore: number; likes: number; nickname?: string; profileImage?: string };
             const scoredItems: ScoredItem[] = [];
 
             // Add user links
-            userLinks.forEach(link => {
+            allUserLinks.forEach(link => {
                 const likes = likeCountMap[link.id] || 0;
                 const boost = link.boost_score || 0;
+                const profile = profileMap[link.user_id];
                 scoredItems.push({
                     link,
                     source: 'user',
                     totalScore: likes + boost,
                     likes,
+                    nickname: profile?.nickname,
+                    profileImage: profile?.avatarUrl,
                 });
             });
 
@@ -317,6 +345,8 @@ export function useExplore(): UseExploreReturn {
                     source: 'curated',
                     totalScore: curated.boost_score || 0,
                     likes: 0,
+                    nickname: curated.nickname || '에디터 추천',
+                    profileImage: curated.profile_image,
                 });
             });
 
@@ -326,7 +356,7 @@ export function useExplore(): UseExploreReturn {
 
             // Build Top 10 result
             const top10: Top10Item[] = top10Items.map((item, index) => ({
-                ...transformLink(item.link, item.likes, likedLinks.has(item.link.id)),
+                ...transformLink(item.link, item.likes, likedLinks.has(item.link.id), item.nickname, item.profileImage),
                 rank: index + 1,
                 weeklyLikeGain: item.likes,
                 rankChange: 'same' as const,
