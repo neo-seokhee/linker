@@ -200,13 +200,13 @@ export function useExplore(): UseExploreReturn {
         );
     };
 
-    // Fetch Top 10 by 7-day like increment
+    // Fetch Top 10 by 7-day like increment + boost score (including curated links)
     const fetchTop10 = async () => {
-        // Try to get from favorite_history if it exists
         try {
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+            // Get 7-day likes
             const { data: recentFavorites, error } = await supabase
                 .from('favorite_history')
                 .select('link_id')
@@ -225,37 +225,71 @@ export function useExplore(): UseExploreReturn {
                 });
             }
 
-            // Sort and get top 10
-            const sortedLinkIds = Object.entries(likeCountMap)
-                .sort(([, a], [, b]) => b - a)
-                .slice(0, 10)
-                .map(([id]) => id);
-
-            if (sortedLinkIds.length === 0) {
-                return [];
+            // Get user links with boost_score
+            const userLinkIds = Object.keys(likeCountMap);
+            let userLinks: any[] = [];
+            if (userLinkIds.length > 0) {
+                const { data } = await supabase
+                    .from('links')
+                    .select('*, boost_score')
+                    .in('id', userLinkIds);
+                userLinks = data || [];
             }
 
-            // Fetch link details (without is_public filter - column might not exist)
-            const { data: links } = await supabase
-                .from('links')
+            // Get curated links that should show in top10
+            const { data: curatedLinks } = await supabase
+                .from('curated_links')
                 .select('*')
-                .in('id', sortedLinkIds);
+                .eq('show_in_top10', true);
 
-            if (!links) return [];
+            // Combine all links with scores
+            type ScoredItem = { link: any; source: 'user' | 'curated'; totalScore: number; likes: number };
+            const scoredItems: ScoredItem[] = [];
 
-            // Build Top 10 with ranks
-            const top10: Top10Item[] = sortedLinkIds.map((linkId, index) => {
-                const link = links.find(l => l.id === linkId);
-                if (!link) return null;
+            // Add user links
+            userLinks.forEach(link => {
+                const likes = likeCountMap[link.id] || 0;
+                const boost = link.boost_score || 0;
+                scoredItems.push({
+                    link,
+                    source: 'user',
+                    totalScore: likes + boost,
+                    likes,
+                });
+            });
 
-                return {
-                    ...transformLink(link, likeCountMap[linkId] || 0, likedLinks.has(linkId)),
-                    rank: index + 1,
-                    weeklyLikeGain: likeCountMap[linkId] || 0,
-                    rankChange: 'same' as const,
-                    rankDelta: undefined,
-                };
-            }).filter(Boolean) as Top10Item[];
+            // Add curated links
+            curatedLinks?.forEach(curated => {
+                scoredItems.push({
+                    link: {
+                        id: curated.id,
+                        url: curated.url,
+                        og_title: curated.title,
+                        custom_title: curated.title,
+                        og_image: curated.thumbnail,
+                        og_description: curated.description,
+                        user_id: null,
+                        category_id: null,
+                        created_at: curated.created_at,
+                    },
+                    source: 'curated',
+                    totalScore: curated.boost_score || 0,
+                    likes: 0,
+                });
+            });
+
+            // Sort by total score and take top 10
+            scoredItems.sort((a, b) => b.totalScore - a.totalScore);
+            const top10Items = scoredItems.slice(0, 10);
+
+            // Build Top 10 result
+            const top10: Top10Item[] = top10Items.map((item, index) => ({
+                ...transformLink(item.link, item.likes, likedLinks.has(item.link.id)),
+                rank: index + 1,
+                weeklyLikeGain: item.likes,
+                rankChange: 'same' as const,
+                rankDelta: undefined,
+            }));
 
             return top10;
         } catch (e) {
@@ -264,47 +298,74 @@ export function useExplore(): UseExploreReturn {
         }
     };
 
-    // Fetch featured links (admin-selected)
+    // Fetch featured links (admin-selected user links + curated links)
     const fetchFeatured = async () => {
         try {
-            // Try to get featured links (requires is_featured column)
-            const { data: links, error } = await supabase
+            // Get featured user links
+            const { data: userLinks } = await supabase
                 .from('links')
                 .select('*')
                 .eq('is_featured', true)
                 .order('created_at', { ascending: false })
                 .limit(10);
 
-            if (error) {
-                // is_featured column doesn't exist yet
-                console.log('is_featured column not found, skipping featured');
+            // Get curated featured links
+            const { data: curatedLinks } = await supabase
+                .from('curated_links')
+                .select('*')
+                .eq('show_in_featured', true)
+                .order('created_at', { ascending: false });
+
+            // Combine both
+            const allFeatured: any[] = [];
+
+            // Add curated links first (they're admin curated, higher priority)
+            curatedLinks?.forEach(curated => {
+                allFeatured.push({
+                    id: curated.id,
+                    url: curated.url,
+                    og_title: curated.title,
+                    custom_title: curated.title,
+                    og_image: curated.thumbnail,
+                    og_description: curated.description,
+                    user_id: null,
+                    category_id: null,
+                    created_at: curated.created_at,
+                    _source: 'curated',
+                });
+            });
+
+            // Add user featured links
+            userLinks?.forEach(link => {
+                allFeatured.push({ ...link, _source: 'user' });
+            });
+
+            if (allFeatured.length === 0) {
                 return [];
             }
 
-            if (!links || links.length === 0) {
-                return [];
-            }
-
-            // Get like counts (if favorite_history exists)
-            const linkIds = links.map(l => l.id);
+            // Get like counts for user links
+            const userLinkIds = allFeatured.filter(l => l._source === 'user').map(l => l.id);
             const likeCountMap: Record<string, number> = {};
 
-            try {
-                const { data: likeCounts } = await supabase
-                    .from('favorite_history')
-                    .select('link_id')
-                    .in('link_id', linkIds);
+            if (userLinkIds.length > 0) {
+                try {
+                    const { data: likeCounts } = await supabase
+                        .from('favorite_history')
+                        .select('link_id')
+                        .in('link_id', userLinkIds);
 
-                if (likeCounts) {
-                    likeCounts.forEach(lc => {
-                        likeCountMap[lc.link_id] = (likeCountMap[lc.link_id] || 0) + 1;
-                    });
+                    if (likeCounts) {
+                        likeCounts.forEach(lc => {
+                            likeCountMap[lc.link_id] = (likeCountMap[lc.link_id] || 0) + 1;
+                        });
+                    }
+                } catch (e) {
+                    // favorite_history table might not exist yet
                 }
-            } catch (e) {
-                // favorite_history table might not exist yet
             }
 
-            return links.map(link =>
+            return allFeatured.slice(0, 10).map(link =>
                 transformLink(link, likeCountMap[link.id] || 0, likedLinks.has(link.id))
             );
         } catch (e) {
