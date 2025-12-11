@@ -286,11 +286,11 @@ export function useExplore(): UseExploreReturn {
                 linksWithLikes = data || [];
             }
 
-            // Get links with boost_score > 0 (even if no likes)
+            // Get links with boost_score >= 0 (even if no likes)
             const { data: boostedLinks } = await supabase
                 .from('links')
                 .select('*')
-                .gt('boost_score', 0);
+                .gte('boost_score', 0);
 
             // Merge both lists (avoid duplicates)
             const allLinkIds = new Set<string>();
@@ -310,11 +310,11 @@ export function useExplore(): UseExploreReturn {
                 }
             });
 
-            // Get curated links with boost_score > 0 (any curated link with boost score should appear in Top 10)
+            // Get curated links with boost_score >= 0 (any curated link should appear in Top 10)
             const { data: curatedLinks } = await supabase
                 .from('curated_links')
                 .select('*')
-                .gt('boost_score', 0);
+                .gte('boost_score', 0);
 
             // Get profiles for user links
             const userIds = allUserLinks.map(l => l.user_id).filter(Boolean);

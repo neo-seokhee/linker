@@ -345,32 +345,6 @@ export default function SettingsPage() {
                         </View>
                     </View>
 
-                    {/* Data Section */}
-                    <View style={styles.section}>
-                        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>데이터</Text>
-
-                        <View style={[styles.settingsGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <SettingItem
-                                icon="cloud-download-outline"
-                                title="데이터 백업"
-                                subtitle={`${links.length}개의 링크`}
-                                onPress={handleDataBackup}
-                            />
-                            <SettingItem
-                                icon="cloud-upload-outline"
-                                title="데이터 복원"
-                                subtitle="백업된 데이터를 복원합니다"
-                                onPress={() => showToastNotification('복원 기능은 추후 업데이트 예정입니다')}
-                            />
-                            <SettingItem
-                                icon="trash-outline"
-                                title="모든 데이터 삭제"
-                                subtitle="저장된 모든 링크를 삭제합니다"
-                                onPress={handleDeleteAllData}
-                                danger
-                            />
-                        </View>
-                    </View>
 
                     {/* About Section */}
                     <View style={styles.section}>
