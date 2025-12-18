@@ -54,7 +54,26 @@ export default function SettingsPage() {
     const [feedbackText, setFeedbackText] = useState('');
     const [isSendingFeedback, setIsSendingFeedback] = useState(false);
     const [defaultAvatars, setDefaultAvatars] = useState<{ id: string; url: string; label: string }[]>([]);
-    const [newsletterEnabled, setNewsletterEnabled] = useState(true);
+    const [newsletterEnabled, setNewsletterEnabled] = useState(false);
+
+    // Sync newsletter state from profile
+    React.useEffect(() => {
+        if (profile && user) {
+            // Fetch the latest newsletter_enabled status from DB
+            const fetchNewsletterStatus = async () => {
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('newsletter_enabled')
+                    .eq('id', user.id)
+                    .single();
+
+                if (data) {
+                    setNewsletterEnabled(data.newsletter_enabled ?? true);
+                }
+            };
+            fetchNewsletterStatus();
+        }
+    }, [profile, user]);
 
     // Supabase Edge Function URL for feedback
     const FEEDBACK_FUNCTION_URL = 'https://tfvgbybllozijozncser.supabase.co/functions/v1/send-feedback';

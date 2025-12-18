@@ -47,6 +47,7 @@ export const ProfileSetupModal = ({ visible, onClose, onComplete }: ProfileSetup
     const [selectedAvatarUrl, setSelectedAvatarUrl] = useState('');
     const [avatarsFromDB, setAvatarsFromDB] = useState<{ id: string; url: string; label: string }[]>([]);
     const [customAvatarUri, setCustomAvatarUri] = useState<string | null>(null);
+    const [newsletterEnabled, setNewsletterEnabled] = useState(true);
     const [loading, setLoading] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
 
@@ -72,7 +73,7 @@ export const ProfileSetupModal = ({ visible, onClose, onComplete }: ProfileSetup
                 // Get existing profile data
                 const { data: profile } = await supabase
                     .from('profiles')
-                    .select('nickname, avatar_url')
+                    .select('nickname, avatar_url, newsletter_enabled')
                     .eq('id', user.id)
                     .single();
 
@@ -84,6 +85,9 @@ export const ProfileSetupModal = ({ visible, onClose, onComplete }: ProfileSetup
                     } else {
                         setPlaceholderNickname(generateRandomNickname());
                     }
+
+                    // Set newsletter preference
+                    setNewsletterEnabled(profile.newsletter_enabled ?? true);
 
                     if (profile.avatar_url) {
                         // Check if it's a custom avatar (not in default avatars)
@@ -216,6 +220,7 @@ export const ProfileSetupModal = ({ visible, onClose, onComplete }: ProfileSetup
                     id: user.id,
                     nickname: finalNickname,
                     avatar_url: avatarUrl,
+                    newsletter_enabled: newsletterEnabled,
                     updated_at: new Date().toISOString(),
                 }, { onConflict: 'id' });
 
@@ -321,6 +326,27 @@ export const ProfileSetupModal = ({ visible, onClose, onComplete }: ProfileSetup
                                         <Ionicons name="checkmark" size={12} color="#FFF" />
                                     </View>
                                 )}
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Newsletter Toggle */}
+                        <View style={styles.newsletterSection}>
+                            <View style={styles.newsletterHeader}>
+                                <Ionicons name="mail" size={20} color={colors.text} />
+                                <Text style={[styles.newsletterTitle, { color: colors.text }]}>뉴스레터 수신</Text>
+                            </View>
+                            <Text style={[styles.newsletterDescription, { color: colors.textSecondary }]}>
+                                매주 엄선된 링크를 이메일로 받아보세요
+                            </Text>
+                            <TouchableOpacity
+                                style={[styles.newsletterToggle, newsletterEnabled && { backgroundColor: colors.accent }]}
+                                onPress={() => setNewsletterEnabled(!newsletterEnabled)}
+                            >
+                                <View style={[
+                                    styles.newsletterToggleThumb,
+                                    { backgroundColor: '#FFF' },
+                                    newsletterEnabled && styles.newsletterToggleThumbActive
+                                ]} />
                             </TouchableOpacity>
                         </View>
 
@@ -439,6 +465,51 @@ const styles = StyleSheet.create({
     uploadText: {
         fontSize: 10,
         marginTop: 2,
+    },
+    newsletterSection: {
+        marginTop: 24,
+        padding: 16,
+        borderRadius: 12,
+        backgroundColor: 'rgba(128,128,128,0.05)',
+        position: 'relative',
+    },
+    newsletterHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 4,
+    },
+    newsletterTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    newsletterDescription: {
+        fontSize: 13,
+        marginBottom: 12,
+    },
+    newsletterToggle: {
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        width: 50,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#ccc',
+        padding: 2,
+        justifyContent: 'center',
+    },
+    newsletterToggleThumb: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    newsletterToggleThumbActive: {
+        alignSelf: 'flex-end',
     },
     footer: {
         padding: 20,
