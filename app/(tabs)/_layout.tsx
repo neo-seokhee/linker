@@ -1,8 +1,9 @@
 // Tab Layout - Bottom navigation with custom URL-aware tab bar for web
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
 import { useAppSettings } from '@/hooks/useAppSettings';
@@ -14,29 +15,10 @@ const MAX_WIDTH = 390;
 function CustomTabBar({ state, descriptors, navigation }: any) {
   const { effectiveTheme } = useAppSettings();
   const colors = Colors[effectiveTheme];
-  const [activeTab, setActiveTab] = useState('index');
+  const insets = useSafeAreaInsets();
 
-  // On web, read URL to determine active tab
-  useEffect(() => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const path = window.location.pathname;
-      if (path.includes('/storage')) {
-        setActiveTab('storage');
-      } else if (path.includes('/settings')) {
-        setActiveTab('settings');
-      } else {
-        setActiveTab('index');
-      }
-    }
-  }, []);
-
-  // On native, use expo-router state
-  useEffect(() => {
-    if (Platform.OS !== 'web') {
-      const route = state.routes[state.index];
-      setActiveTab(route.name);
-    }
-  }, [state.index]);
+  // Derive active tab directly from navigation state
+  const activeTab = state.routes[state.index].name;
 
   const tabs = [
     { name: 'index', title: '탐색', icon: 'compass', iconOutline: 'compass-outline' },
@@ -45,12 +27,19 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   ];
 
   return (
-    <View style={[styles.tabBar, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+    <View style={[
+      styles.tabBar,
+      {
+        backgroundColor: colors.background,
+        borderTopColor: colors.border,
+        // Add safe area + extra padding for better spacing
+        paddingBottom: insets.bottom + 12,
+      }
+    ]}>
       {tabs.map((tab) => {
         const isFocused = activeTab === tab.name;
 
         const onPress = () => {
-          setActiveTab(tab.name);
           const event = navigation.emit({
             type: 'tabPress',
             target: tab.name,
@@ -71,7 +60,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
           >
             <Ionicons
               name={(isFocused ? tab.icon : tab.iconOutline) as any}
-              size={24}
+              size={26}
               color={isFocused ? colors.accent : colors.tabIconDefault}
             />
             <Text style={[
@@ -124,20 +113,17 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    borderTopWidth: 1,
-    height: 70,
-    paddingTop: 8,
-    paddingBottom: 8,
+    borderTopWidth: 0.5,
+    paddingTop: 10,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
-    marginTop: 4,
   },
 });
-

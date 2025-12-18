@@ -20,6 +20,8 @@ interface Link {
   og_image: string
   og_description: string
   created_at: string
+  custom_title?: string
+  saver_nickname?: string
 }
 
 interface User {
@@ -28,14 +30,14 @@ interface User {
   nickname: string
 }
 
-// Get links saved in the last 7 days by a user
+// Get links saved in the last 7 days by a user with creator nickname
 async function getUserWeeklyLinks(supabase: any, userId: string): Promise<Link[]> {
   const sevenDaysAgo = new Date()
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
   const { data, error } = await supabase
     .from('links')
-    .select('id, url, og_title, og_image, og_description, created_at')
+    .select('id, url, og_title, og_image, og_description, created_at, custom_title, user_id')
     .eq('user_id', userId)
     .gte('created_at', sevenDaysAgo.toISOString())
     .order('created_at', { ascending: false })
@@ -44,36 +46,101 @@ async function getUserWeeklyLinks(supabase: any, userId: string): Promise<Link[]
     console.error('Error fetching user links:', error)
     return []
   }
-  return data || []
+
+  // Get user profile for nickname
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('nickname')
+    .eq('id', userId)
+    .single()
+
+  const DEFAULT_IMAGE = 'https://placehold.co/80x60/667eea/ffffff?text=LINKER'
+
+  return (data || []).map((l: any) => {
+    const isValidImageUrl = l.og_image &&
+      (l.og_image.startsWith('http://') || l.og_image.startsWith('https://'))
+
+    return {
+      ...l,
+      og_image: isValidImageUrl ? l.og_image : DEFAULT_IMAGE,
+      saver_nickname: profile?.nickname || '익명'
+    }
+  })
 }
 
-// Get top 3 popular links (by boost_score or favorites count)
+// Get top 3 popular links (by boost_score)
 async function getTopRecommendations(supabase: any): Promise<Link[]> {
-  // Try curated links first
+  const DEFAULT_IMAGE = 'https://placehold.co/80x60/667eea/ffffff?text=LINKER'
+
+  // Get curated links with highest boost_score
   const { data: curatedLinks, error: curatedError } = await supabase
     .from('curated_links')
-    .select('id, url, og_title, og_image, og_description, created_at')
+    .select('id, url, title, thumbnail, description, created_at, boost_score, created_by, editor_id')
+    .gt('boost_score', 0)
     .order('boost_score', { ascending: false })
     .limit(3)
 
-  if (!curatedError && curatedLinks && curatedLinks.length > 0) {
-    return curatedLinks
-  }
-
-  // Fallback to most favorited user links
-  const { data: popularLinks, error } = await supabase
-    .from('links')
-    .select('id, url, og_title, og_image, og_description, created_at')
-    .eq('is_public', true)
-    .eq('is_favorite', true)
-    .order('created_at', { ascending: false })
-    .limit(3)
-
-  if (error) {
-    console.error('Error fetching recommendations:', error)
+  if (curatedError) {
+    console.error('Error fetching curated links:', curatedError)
     return []
   }
-  return popularLinks || []
+
+  if (curatedLinks && curatedLinks.length > 0) {
+    // Get unique user IDs for created_by (from profiles)
+    const createdByIds = [...new Set(curatedLinks.map((l: any) => l.created_by).filter(Boolean))]
+    // Get unique editor IDs (from curated_editors)
+    const editorIds = [...new Set(curatedLinks.map((l: any) => l.editor_id).filter(Boolean))]
+
+    // Fetch profiles for created_by users
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, nickname')
+      .in('id', createdByIds)
+
+    // Fetch curated_editors for editor nicknames
+    const { data: editors } = await supabase
+      .from('curated_editors')
+      .select('id, nickname')
+      .in('id', editorIds)
+
+    // Create maps for quick lookup
+    const profileNicknameMap: Record<string, string> = {}
+    if (profiles) {
+      profiles.forEach((p: any) => {
+        profileNicknameMap[p.id] = p.nickname
+      })
+    }
+
+    const editorNicknameMap: Record<string, string> = {}
+    if (editors) {
+      editors.forEach((e: any) => {
+        editorNicknameMap[e.id] = e.nickname
+      })
+    }
+
+    // Map curated_links columns to Link interface
+    return curatedLinks.map((l: any) => {
+      // Validate thumbnail URL
+      const isValidImageUrl = l.thumbnail &&
+        (l.thumbnail.startsWith('http://') || l.thumbnail.startsWith('https://'))
+
+      // Get nickname: prioritize created_by (original author), fallback to editor nickname
+      const saver = profileNicknameMap[l.created_by] || editorNicknameMap[l.editor_id] || 'LINKER 추천'
+
+      return {
+        id: l.id,
+        url: l.url,
+        og_title: l.title,
+        og_image: isValidImageUrl ? l.thumbnail : DEFAULT_IMAGE,
+        og_description: l.description,
+        created_at: l.created_at,
+        custom_title: l.title,
+        saver_nickname: saver
+      }
+    })
+  }
+
+  return []
 }
 
 // Generate HTML email template
@@ -84,24 +151,25 @@ function generateEmailHtml(
   trackingId: string,
   unsubscribeUrl: string
 ): string {
-  const linkCard = (link: Link, baseUrl: string) => `
+  const DEFAULT_IMAGE = 'https://placehold.co/80x60/667eea/ffffff?text=LINKER'
+
+  const linkCard = (link: Link, saverName: string) => `
     <tr>
       <td style="padding: 12px 0; border-bottom: 1px solid #eee;">
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td width="80" style="vertical-align: top;">
-              <img src="${link.og_image || 'https://placehold.co/80x60/f0f0f0/999?text=No+Image'}" 
+              <img src="${link.og_image || DEFAULT_IMAGE}" 
                    alt="" width="80" height="60" 
-                   style="border-radius: 8px; object-fit: cover;">
+                   style="border-radius: 8px; object-fit: cover;"
+                   onerror="this.src='${DEFAULT_IMAGE}'">
             </td>
             <td style="padding-left: 12px; vertical-align: top;">
-              <a href="${baseUrl}/track-click?id=${trackingId}&url=${encodeURIComponent(link.url)}" 
+              <a href="${link.url}" 
                  style="color: #333; text-decoration: none; font-weight: 600; font-size: 14px;">
-                ${link.og_title || link.url}
+                ${link.custom_title || link.og_title || link.url}
               </a>
-              <p style="margin: 4px 0 0; color: #666; font-size: 12px; line-height: 1.4;">
-                ${(link.og_description || '').substring(0, 80)}${(link.og_description || '').length > 80 ? '...' : ''}
-              </p>
+              <p style="margin: 4px 0 0; color: #667eea; font-size: 11px;">by ${saverName}</p>
             </td>
           </tr>
         </table>
@@ -110,7 +178,7 @@ function generateEmailHtml(
   `
 
   const userLinksHtml = userLinks.length > 0
-    ? userLinks.map(l => linkCard(l, SUPABASE_URL)).join('')
+    ? userLinks.map(l => linkCard(l, l.saver_nickname || nickname)).join('')
     : '<tr><td style="padding: 20px; text-align: center; color: #999;">이번 주에 저장한 링크가 없습니다</td></tr>'
 
   return `
@@ -165,8 +233,18 @@ function generateEmailHtml(
                 🔥 이번 주 인기 링크 TOP 3
               </h3>
               <table width="100%" cellpadding="0" cellspacing="0">
-                ${recommendations.map(l => linkCard(l, SUPABASE_URL)).join('')}
+                ${recommendations.map(l => linkCard(l, l.saver_nickname || 'LINKER 추천')).join('')}
               </table>
+            </td>
+          </tr>
+          
+          <!-- CTA Button -->
+          <tr>
+            <td style="padding: 20px 24px 30px; text-align: center;">
+              <a href="https://golinker.app" 
+                 style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 14px;">
+                LINKER에서 확인하기
+              </a>
             </td>
           </tr>
           
@@ -174,7 +252,7 @@ function generateEmailHtml(
           <tr>
             <td style="background-color: #f9f9f9; padding: 20px 24px; text-align: center; border-top: 1px solid #eee;">
               <p style="margin: 0; color: #999; font-size: 12px;">
-                더포지인더스트리 | 사업자등록번호: 241-25-02034
+                LINKER  |  더포지인더스트리  |  사업자등록번호: 241-25-02034
               </p>
               <p style="margin: 8px 0 0;">
                 <a href="${unsubscribeUrl}" style="color: #999; font-size: 12px;">수신거부</a>
@@ -204,7 +282,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'LINKER <newsletter@linker.im>',
+        from: 'LINKER <newsletter@golinker.app>',
         to: [to],
         subject,
         html,
@@ -297,8 +375,8 @@ serve(async (req) => {
         console.error(`Failed to send to ${user.email}`)
       }
 
-      // Rate limit: wait 100ms between emails
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Rate limit: wait 600ms between emails (Resend allows 2/sec)
+      await new Promise(resolve => setTimeout(resolve, 600))
     }
 
     return new Response(

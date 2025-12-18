@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>구독 해지 - LINKER</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 24px;
+            padding: 48px;
+            text-align: center;
+            max-width: 480px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            font-size: 40px;
+        }
+
+        .icon-success {
+            background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+            color: white;
+        }
+
+        .icon-error {
+            background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+            color: white;
+        }
+
+        .icon-default {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 16px;
+            font-weight: 700;
+        }
+
+        p {
+            color: #666;
+            font-size: 15px;
+            line-height: 1.8;
+            margin-bottom: 32px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 14px 36px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 15px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+        }
+
+        .success,
+        .error,
+        .default {
+            display: none;
+        }
+    </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const params = new URLSearchParams(window.location.search);
+            const status = params.get('status');
+
+            if (status === 'success') {
+                document.querySelector('.success').style.display = 'block';
+            } else if (status === 'error') {
+                document.querySelector('.error').style.display = 'block';
+            } else {
+                document.querySelector('.default').style.display = 'block';
+            }
+        });
+    </script>
+</head>
+
+<body>
+    <div class="card">
+        <!-- Success State -->
+        <div class="success">
+            <div class="icon icon-success">✓</div>
+            <h1>구독이 해지되었습니다</h1>
+            <p>더 이상 LINKER 주간 뉴스레터를 받지 않습니다.<br>언제든 설정에서 다시 구독할 수 있습니다.</p>
+            <a href="https://golinker.app" class="btn">LINKER로 돌아가기</a>
+        </div>
+
+        <!-- Error State -->
+        <div class="error">
+            <div class="icon icon-error">✕</div>
+            <h1>오류가 발생했습니다</h1>
+            <p>구독 해지 처리 중 문제가 발생했습니다.<br>잠시 후 다시 시도해주세요.</p>
+            <a href="https://golinker.app" class="btn">LINKER로 돌아가기</a>
+        </div>
+
+        <!-- Default State -->
+        <div class="default">
+            <div class="icon icon-default">📧</div>
+            <h1>뉴스레터 구독 관리</h1>
+            <p>LINKER 뉴스레터 구독 상태를 관리할 수 있습니다.<br>이메일의 수신거부 링크를 통해 구독을 해지할 수 있습니다.</p>
+            <a href="https://golinker.app" class="btn">LINKER로 돌아가기</a>
+        </div>
+    </div>
+</body>
+
+</html>

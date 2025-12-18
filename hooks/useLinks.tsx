@@ -131,10 +131,18 @@ export function LinksProvider({ children }: { children: ReactNode }) {
             // Get current user
             const { data: { user } } = await supabase.auth.getUser();
 
+            if (!user) {
+                setCategories(DEFAULT_CATEGORIES);
+                setLinks([]);
+                setIsLoading(false);
+                return;
+            }
+
             // Load categories (default categories + user's custom categories)
             const { data: categoriesData, error: categoriesError } = await supabase
                 .from('categories')
                 .select('*')
+                .or(`user_id.eq.${user.id},is_default.eq.true`)
                 .order('order_index', { ascending: true });
 
             if (categoriesError) {
@@ -150,10 +158,11 @@ export function LinksProvider({ children }: { children: ReactNode }) {
             //     await addSampleLinksForNewUser(user.id);
             // }
 
-            // Load links (RLS will filter by user_id automatically)
+            // Load links (Filter by user_id to only show my links)
             const { data: linksData, error: linksError } = await supabase
                 .from('links')
                 .select('*')
+                .eq('user_id', user.id)
                 .order('created_at', { ascending: false });
 
             if (linksError) {

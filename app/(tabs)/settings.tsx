@@ -1,5 +1,8 @@
 // Settings Page - Settings and account management
 import { CategoryManagementModal } from '@/components/CategoryManagementModal';
+import { LoginPromptModal } from '@/components/LoginPromptModal';
+import { ProfileSetupModal } from '@/components/ProfileSetupModal';
+import { SignUpModal } from '@/components/SignUpModal';
 import Colors from '@/constants/Colors';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useAuth } from '@/hooks/useAuth';
@@ -12,9 +15,11 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
 import {
     Image,
+    Linking,
     Modal,
     ScrollView,
     StyleSheet,
+    Switch,
     Text,
     TextInput,
     TouchableOpacity,
@@ -30,7 +35,7 @@ export default function SettingsPage() {
     const colors = Colors[effectiveTheme];
     const insets = useSafeAreaInsets();
     const { links } = useLinks();
-    const { user, signOut } = useAuth();
+    const { user, signOut, signInWithKakao } = useAuth();
     const { profile, updateNickname, updateProfile, isLoading: profileLoading } = useProfile();
 
     const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false);
@@ -38,10 +43,53 @@ export default function SettingsPage() {
     const [showToast, setShowToast] = useState(false);
     const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
     const [confirmMessage, setConfirmMessage] = useState('');
+    const [showSignUpModal, setShowSignUpModal] = useState(false);
+    const [showProfileSetupModal, setShowProfileSetupModal] = useState(false);
     const [isEditingProfile, setIsEditingProfile] = useState(false);
     const [nicknameInput, setNicknameInput] = useState('');
     const [avatarInput, setAvatarInput] = useState('');
     const [isUploading, setIsUploading] = useState(false);
+    const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+    const [feedbackText, setFeedbackText] = useState('');
+    const [isSendingFeedback, setIsSendingFeedback] = useState(false);
+    const [defaultAvatars, setDefaultAvatars] = useState<{ id: string; url: string; label: string }[]>([]);
+    const [newsletterEnabled, setNewsletterEnabled] = useState(true);
+
+    // Supabase Edge Function URL for feedback
+    const FEEDBACK_FUNCTION_URL = 'https://tfvgbybllozijozncser.supabase.co/functions/v1/send-feedback';
+
+    const sendFeedback = async () => {
+        if (!feedbackText.trim()) {
+            showToastNotification('의견을 입력해주세요');
+            return;
+        }
+
+        setIsSendingFeedback(true);
+        try {
+            const response = await fetch(FEEDBACK_FUNCTION_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userEmail: user?.email || null,
+                    feedback: feedbackText,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to send feedback');
+            }
+
+            showToastNotification('의견이 전송되었습니다. 감사합니다!');
+            setFeedbackText('');
+            setShowFeedbackModal(false);
+        } catch (error) {
+            console.log('Error sending feedback:', error);
+            showToastNotification('의견 전송에 실패했습니다. 다시 시도해주세요.');
+        } finally {
+            setIsSendingFeedback(false);
+        }
+    };
 
     const showToastNotification = (message: string) => {
         setToastMessage(message);
@@ -127,10 +175,21 @@ export default function SettingsPage() {
         return user.email || '카카오 로그인';
     };
 
-    const handleStartEditProfile = () => {
+    const handleStartEditProfile = async () => {
         setNicknameInput(profile?.nickname || '');
         setAvatarInput(profile?.avatarUrl || '');
         setIsEditingProfile(true);
+
+        // Fetch default avatars from DB
+        const { data } = await supabase
+            .from('default_avatars')
+            .select('id, url, label')
+            .eq('is_active', true)
+            .order('order_index', { ascending: true });
+
+        if (data) {
+            setDefaultAvatars(data);
+        }
     };
 
     const pickImage = async () => {
@@ -151,8 +210,8 @@ export default function SettingsPage() {
             const response = await fetch(uri);
             const blob = await response.blob();
             const fileExt = uri.split('.').pop()?.toLowerCase() ?? 'jpeg';
-            const fileName = `${user?.id}-${Date.now()}.${fileExt}`;
-            const filePath = `${fileName}`;
+            const fileName = `${user?.id} -${Date.now()}.${fileExt} `;
+            const filePath = `${fileName} `;
 
             const { error: uploadError } = await supabase.storage
                 .from('avatars')
@@ -295,7 +354,7 @@ export default function SettingsPage() {
                             </View>
                         </TouchableOpacity>
 
-                        {user && (
+                        {user ? (
                             <TouchableOpacity
                                 style={[styles.logoutButton, { borderColor: colors.border }]}
                                 onPress={handleLogout}
@@ -303,6 +362,24 @@ export default function SettingsPage() {
                                 <Ionicons name="log-out-outline" size={18} color="#FF4444" />
                                 <Text style={styles.logoutButtonText}>로그아웃</Text>
                             </TouchableOpacity>
+                        ) : (
+                            <View>
+                                <TouchableOpacity
+                                    style={[styles.kakaoLoginButton, { backgroundColor: '#FEE500' }]}
+                                    onPress={signInWithKakao}
+                                >
+                                    <Ionicons name="chatbubble" size={18} color="#000" />
+                                    <Text style={styles.kakaoLoginButtonText}>카카오 로그인</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={{ marginTop: 12, padding: 8, alignSelf: 'center' }}
+                                    onPress={() => setShowSignUpModal(true)}
+                                >
+                                    <Text style={{ color: colors.textSecondary, fontSize: 13, textDecorationLine: 'underline' }}>
+                                        회원가입
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
                         )}
                     </View>
 
@@ -312,12 +389,40 @@ export default function SettingsPage() {
                         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>앱 설정</Text>
 
                         <View style={[styles.settingsGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <SettingItem
-                                icon="notifications-outline"
-                                title="알림"
-                                subtitle="푸시 알림 설정"
-                                onPress={() => showToastNotification('알림 기능은 추후 업데이트 예정입니다')}
-                            />
+                            {user && (
+                                <SettingItem
+                                    icon="notifications-outline"
+                                    title="알림"
+                                    subtitle="푸시 알림 설정"
+                                    onPress={() => showToastNotification('알림 기능은 추후 업데이트 예정입니다')}
+                                />
+                            )}
+                            {user && (
+                                <SettingItem
+                                    icon="mail-outline"
+                                    title="주간 뉴스레터"
+                                    subtitle="매주 월요일 저장 링크 요약 받기"
+                                    showArrow={false}
+                                    onPress={async () => {
+                                        const newValue = !newsletterEnabled;
+                                        setNewsletterEnabled(newValue);
+                                        await updateProfile({ newsletter_enabled: newValue });
+                                        showToastNotification(newValue ? '뉴스레터 구독이 활성화되었습니다' : '뉴스레터 구독이 해제되었습니다');
+                                    }}
+                                    rightComponent={
+                                        <Switch
+                                            value={newsletterEnabled}
+                                            onValueChange={async (value) => {
+                                                setNewsletterEnabled(value);
+                                                await updateProfile({ newsletter_enabled: value });
+                                                showToastNotification(value ? '뉴스레터 구독이 활성화되었습니다' : '뉴스레터 구독이 해제되었습니다');
+                                            }}
+                                            trackColor={{ false: colors.border, true: colors.accent }}
+                                            thumbColor={newsletterEnabled ? '#fff' : '#f4f3f4'}
+                                        />
+                                    }
+                                />
+                            )}
                             <SettingItem
                                 icon={isDarkMode ? 'moon' : 'sunny'}
                                 title="테마"
@@ -336,12 +441,14 @@ export default function SettingsPage() {
                                     </View>
                                 }
                             />
-                            <SettingItem
-                                icon="folder-outline"
-                                title="카테고리 관리"
-                                subtitle="카테고리 추가, 수정, 삭제"
-                                onPress={() => setIsCategoryModalVisible(true)}
-                            />
+                            {user && (
+                                <SettingItem
+                                    icon="folder-outline"
+                                    title="카테고리 관리"
+                                    subtitle="카테고리 추가, 수정, 삭제"
+                                    onPress={() => setIsCategoryModalVisible(true)}
+                                />
+                            )}
                         </View>
                     </View>
 
@@ -352,22 +459,36 @@ export default function SettingsPage() {
 
                         <View style={[styles.settingsGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <SettingItem
-                                icon="information-circle-outline"
-                                title="앱 정보"
-                                subtitle="Linker 버전 1.0.0"
-                                onPress={() => showToastNotification('Linker v1.0.0 - URL을 저장하고 관리하는 앱입니다')}
+                                icon="chatbubble-ellipses-outline"
+                                title="의견 보내기"
+                                onPress={() => {
+                                    if (!user) {
+                                        setShowLoginPrompt(true);
+                                        return;
+                                    }
+                                    setShowFeedbackModal(true);
+                                }}
                             />
-                            <SettingItem
-                                icon="document-text-outline"
-                                title="이용약관"
-                                onPress={() => showToastNotification('이용약관 내용이 여기에 표시됩니다')}
-                            />
-                            <SettingItem
-                                icon="shield-checkmark-outline"
-                                title="개인정보 처리방침"
-                                onPress={() => showToastNotification('개인정보 처리방침 내용이 여기에 표시됩니다')}
-                            />
+                            {user && (
+                                <SettingItem
+                                    icon="document-text-outline"
+                                    title="이용약관 및 개인정보 처리방침"
+                                    onPress={() => Linking.openURL('https://www.notion.so/neolee/LINKER-2c76e247b035812c939dd2b57680ba27')}
+                                />
+                            )}
                         </View>
+
+                        {/* Business Info */}
+                        <Text style={{
+                            color: colors.textSecondary,
+                            fontSize: 10,
+                            textAlign: 'center',
+                            marginTop: 16,
+                            lineHeight: 16,
+                        }}>
+                            LINKER(링커) | 사업자명 : 더포지인더스트리(The Forge Industries){'\n'}
+                            사업자등록번호 : 241-25-02034 | 통신판매업신고번호 : 제 2024-서울송파-1849호
+                        </Text>
                     </View>
 
                     {/* Bottom padding */}
@@ -380,6 +501,64 @@ export default function SettingsPage() {
                     onClose={() => setIsCategoryModalVisible(false)}
                 />
 
+                {/* Login Prompt Modal */}
+                <LoginPromptModal
+                    visible={showLoginPrompt}
+                    onClose={() => setShowLoginPrompt(false)}
+                />
+
+                {/* Feedback Modal */}
+                <Modal
+                    visible={showFeedbackModal}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowFeedbackModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+                            <Text style={[styles.modalTitle, { color: colors.text }]}>의견 보내기</Text>
+                            <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 16 }}>
+                                서비스 개선을 위한 의견을 남겨주세요
+                            </Text>
+
+                            <TextInput
+                                style={[
+                                    styles.feedbackInput,
+                                    { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }
+                                ]}
+                                placeholder="의견을 입력해주세요..."
+                                placeholderTextColor={colors.textSecondary}
+                                multiline
+                                numberOfLines={4}
+                                value={feedbackText}
+                                onChangeText={setFeedbackText}
+                                textAlignVertical="top"
+                            />
+
+                            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+                                <TouchableOpacity
+                                    style={[styles.modalButton, { backgroundColor: colors.border, flex: 1 }]}
+                                    onPress={() => {
+                                        setFeedbackText('');
+                                        setShowFeedbackModal(false);
+                                    }}
+                                >
+                                    <Text style={{ color: colors.text, fontWeight: '600' }}>취소</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.modalButton, { backgroundColor: colors.accent, flex: 1 }]}
+                                    onPress={sendFeedback}
+                                    disabled={isSendingFeedback}
+                                >
+                                    <Text style={{ color: '#FFF', fontWeight: '600' }}>
+                                        {isSendingFeedback ? '전송 중...' : '보내기'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
+
                 {/* Toast Notification */}
                 {showToast && (
                     <View style={styles.toastContainer}>
@@ -389,6 +568,19 @@ export default function SettingsPage() {
                         </View>
                     </View>
                 )}
+
+                {/* Sign Up Modal */}
+                <SignUpModal
+                    visible={showSignUpModal}
+                    onClose={() => setShowSignUpModal(false)}
+                    onSuccess={() => setShowProfileSetupModal(true)}
+                />
+
+                {/* Profile Setup Modal */}
+                <ProfileSetupModal
+                    visible={showProfileSetupModal}
+                    onClose={() => setShowProfileSetupModal(false)}
+                />
 
                 {/* Confirm Dialog */}
                 {confirmMessage && (
@@ -453,6 +645,35 @@ export default function SettingsPage() {
                                     </View>
                                 </View>
                             </TouchableOpacity>
+
+                            {/* Default Avatars Selection */}
+                            {defaultAvatars.length > 0 && (
+                                <View style={{ marginBottom: 16 }}>
+                                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 8 }}>기본 아이콘 선택</Text>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                                            {defaultAvatars.map((avatar) => (
+                                                <TouchableOpacity
+                                                    key={avatar.id}
+                                                    onPress={() => setAvatarInput(avatar.url)}
+                                                    style={{
+                                                        alignItems: 'center',
+                                                        padding: 4,
+                                                        borderRadius: 8,
+                                                        borderWidth: avatarInput === avatar.url ? 2 : 0,
+                                                        borderColor: colors.accent,
+                                                    }}
+                                                >
+                                                    <Image
+                                                        source={{ uri: avatar.url }}
+                                                        style={{ width: 50, height: 50, borderRadius: 25 }}
+                                                    />
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                    </ScrollView>
+                                </View>
+                            )}
 
                             {/* Nickname Input */}
                             <View style={{ marginBottom: 20 }}>
@@ -573,6 +794,19 @@ const styles = StyleSheet.create({
     },
     logoutButtonText: {
         color: '#FF4444',
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    kakaoLoginButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 14,
+        borderRadius: 10,
+    },
+    kakaoLoginButtonText: {
+        color: '#000',
         fontSize: 15,
         fontWeight: '600',
     },
@@ -718,5 +952,35 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '600',
         color: '#000',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        width: '100%',
+        maxWidth: 360,
+        borderRadius: 16,
+        padding: 20,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        marginBottom: 8,
+    },
+    feedbackInput: {
+        borderWidth: 1,
+        borderRadius: 10,
+        padding: 12,
+        minHeight: 120,
+        fontSize: 15,
+    },
+    modalButton: {
+        paddingVertical: 12,
+        borderRadius: 10,
+        alignItems: 'center',
     },
 });

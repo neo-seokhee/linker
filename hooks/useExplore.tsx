@@ -1,4 +1,5 @@
 // Explore Hook - Fetches live data for explore tab
+import { getCachedExploreData, setCachedExploreData } from '@/utils/exploreCache';
 import { supabase } from '@/utils/supabaseClient';
 import { useCallback, useEffect, useState } from 'react';
 import { getProfilesByUserIds } from './useProfile';
@@ -526,9 +527,20 @@ export function useExplore(): UseExploreReturn {
         setFeedOffset(newOffset);
     };
 
-    // Refresh all data
+    // Refresh all data with cache-first strategy
     const refreshData = useCallback(async () => {
-        setIsLoading(true);
+        // Try to load from cache first for instant display
+        const cached = await getCachedExploreData();
+        if (cached) {
+            setFeedData(cached.feedData);
+            setTop10Data(cached.top10Data);
+            setFeaturedData(cached.featuredData);
+            setIsLoading(false); // Show cached data immediately
+        } else {
+            setIsLoading(true);
+        }
+
+        // Then fetch fresh data in background
         try {
             const user = await getCurrentUser();
             if (user) {
@@ -541,10 +553,16 @@ export function useExplore(): UseExploreReturn {
                 fetchFeatured(),
             ]);
 
-            setFeedData(feed);
+            // Shuffle feed data for variety on each refresh
+            const shuffledFeed = [...feed].sort(() => Math.random() - 0.5);
+
+            setFeedData(shuffledFeed);
             setTop10Data(top10);
             setFeaturedData(featured);
             setFeedOffset(0);
+
+            // Save to cache (save shuffled feed)
+            await setCachedExploreData(shuffledFeed, top10, featured);
         } catch (error) {
             console.error('Error refreshing data:', error);
         } finally {

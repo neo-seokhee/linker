@@ -22,6 +22,50 @@ export function useProfile(): UseProfileReturn {
     const [profile, setProfile] = useState<Profile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
+    // Ensure profile exists, create if not
+    const ensureProfile = useCallback(async (userId: string, email?: string | null, userMetadata?: any) => {
+        // Try to get display name from Kakao user_metadata
+        let defaultNickname: string;
+
+        if (userMetadata?.full_name) {
+            // Use Kakao display name if available
+            defaultNickname = userMetadata.full_name;
+        } else if (userMetadata?.name) {
+            // Fallback to name field
+            defaultNickname = userMetadata.name;
+        } else {
+            // Generate a default nickname from email
+            const emailPrefix = email ? email.split('@')[0] : 'user';
+            const randomSuffix = Math.random().toString(36).substring(2, 6);
+            defaultNickname = `${emailPrefix}_${randomSuffix}`;
+        }
+
+        // Get Kakao profile image from user_metadata
+        const avatarUrl = userMetadata?.avatar_url || userMetadata?.picture || null;
+
+        const { data, error } = await supabase
+            .from('profiles')
+            .upsert({
+                id: userId,
+                nickname: defaultNickname,
+                email: email || null,
+                avatar_url: avatarUrl,
+            }, { onConflict: 'id' })
+            .select()
+            .single();
+
+        if (!error && data) {
+            setProfile({
+                id: data.id,
+                nickname: data.nickname,
+                avatarUrl: data.avatar_url,
+                createdAt: data.created_at,
+                updatedAt: data.updated_at,
+            });
+        }
+        setIsLoading(false);
+    }, []);
+
     // Get current user's profile
     const getProfile = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -40,7 +84,7 @@ export function useProfile(): UseProfileReturn {
         if (error) {
             console.log('Profile not found, creating one...');
             // Profile might not exist, try to create it
-            await ensureProfile(user.id, user.email);
+            await ensureProfile(user.id, user.email, user.user_metadata);
             return;
         }
 
@@ -54,35 +98,7 @@ export function useProfile(): UseProfileReturn {
             });
         }
         setIsLoading(false);
-    }, []);
-
-    // Ensure profile exists, create if not
-    const ensureProfile = async (userId: string, email?: string | null) => {
-        // Generate a default nickname
-        const emailPrefix = email ? email.split('@')[0] : 'user';
-        const randomSuffix = Math.random().toString(36).substring(2, 6);
-        const defaultNickname = `${emailPrefix}_${randomSuffix}`;
-
-        const { data, error } = await supabase
-            .from('profiles')
-            .upsert({
-                id: userId,
-                nickname: defaultNickname,
-            }, { onConflict: 'id' })
-            .select()
-            .single();
-
-        if (!error && data) {
-            setProfile({
-                id: data.id,
-                nickname: data.nickname,
-                avatarUrl: data.avatar_url,
-                createdAt: data.created_at,
-                updatedAt: data.updated_at,
-            });
-        }
-        setIsLoading(false);
-    };
+    }, [ensureProfile]);
 
     // Update nickname
     const updateNickname = async (nickname: string): Promise<boolean> => {
@@ -106,8 +122,8 @@ export function useProfile(): UseProfileReturn {
         return true;
     };
 
-    // Update profile (nickname and/or avatar)
-    const updateProfile = async (updates: { nickname?: string; avatarUrl?: string }): Promise<boolean> => {
+    // Update profile (nickname and/or avatar and/or newsletter settings)
+    const updateProfile = async (updates: { nickname?: string; avatarUrl?: string; newsletter_enabled?: boolean }): Promise<boolean> => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return false;
 
@@ -117,6 +133,7 @@ export function useProfile(): UseProfileReturn {
 
         if (updates.nickname) dbUpdates.nickname = updates.nickname;
         if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl;
+        if (updates.newsletter_enabled !== undefined) dbUpdates.newsletter_enabled = updates.newsletter_enabled;
 
         const { error } = await supabase
             .from('profiles')

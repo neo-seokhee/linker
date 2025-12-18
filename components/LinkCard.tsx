@@ -6,7 +6,6 @@ import { useLinks } from '@/hooks/useLinks';
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import {
-    Alert,
     Image,
     Modal,
     Platform,
@@ -15,8 +14,10 @@ import {
     TextInput,
     TouchableOpacity,
     useWindowDimensions,
-    View,
+    View
 } from 'react-native';
+let Clipboard: any = null;
+try { Clipboard = require('expo-clipboard'); } catch (e) { /* not available */ }
 
 // Mobile-first: max width 390px (iPhone 14 width)
 const MAX_CONTAINER_WIDTH = 390;
@@ -25,19 +26,22 @@ interface LinkCardProps {
     link: Link;
     onPress: () => void;
     onFavoriteToggle: () => void;
+    isNew?: boolean;
 }
 
-export function LinkCard({ link, onPress, onFavoriteToggle }: LinkCardProps) {
+export function LinkCard({ link, onPress, onFavoriteToggle, isNew = false }: LinkCardProps) {
     const { effectiveTheme } = useAppSettings();
     const colors = Colors[effectiveTheme];
     const { width: screenWidth } = useWindowDimensions();
-    const { updateLink, removeLink } = useLinks();
+    const { updateLink, removeLink, categories } = useLinks();
 
     const [showMenu, setShowMenu] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [editTitle, setEditTitle] = useState(link.customTitle || link.ogTitle);
+    const [editThumbnail, setEditThumbnail] = useState(link.ogImage);
     const [editPublic, setEditPublic] = useState(link.isPublic);
+    const [editCategory, setEditCategory] = useState(link.categoryId);
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
 
@@ -67,7 +71,9 @@ export function LinkCard({ link, onPress, onFavoriteToggle }: LinkCardProps) {
     const handleSaveEdit = async () => {
         await updateLink(link.id, {
             customTitle: editTitle.trim() !== link.ogTitle ? editTitle.trim() : undefined,
+            ogImage: editThumbnail.trim(),
             isPublic: editPublic,
+            categoryId: editCategory,
         });
         setShowEditModal(false);
     };
@@ -126,6 +132,12 @@ export function LinkCard({ link, onPress, onFavoriteToggle }: LinkCardProps) {
                         resizeMode="cover"
                         defaultSource={require('@/assets/images/placeholder.png')}
                     />
+                    {/* NEW Badge */}
+                    {isNew && (
+                        <View style={styles.newBadge}>
+                            <Text style={styles.newBadgeText}>NEW</Text>
+                        </View>
+                    )}
                     <TouchableOpacity
                         style={[styles.favoriteButton, { backgroundColor: colors.background + 'CC' }]}
                         onPress={(e) => {
@@ -182,18 +194,25 @@ export function LinkCard({ link, onPress, onFavoriteToggle }: LinkCardProps) {
                             <Text style={[styles.menuText, { color: colors.text }]}>편집</Text>
                         </TouchableOpacity>
                         <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                        <TouchableOpacity style={styles.menuItem} onPress={() => {
+                        <TouchableOpacity style={styles.menuItem} onPress={async () => {
                             setShowMenu(false);
-
                             if (Platform.OS === 'web') {
                                 navigator.clipboard.writeText(link.url);
                                 showToastMessage('링크가 복사되었습니다');
                             } else {
-                                // For native, would use @react-native-clipboard/clipboard
-                                // Using fallback Alert for now if clipboard not available or use Clipboard API if integrated
-                                // Assuming we stick to existing behavior roughly but use Toast if possible
-                                // For now, simulating copy success for Toast demonstration if requested
-                                Alert.alert('링크 복사', link.url);
+                                // Try expo-clipboard, fallback to just showing toast
+                                try {
+                                    if (Clipboard && Clipboard.setStringAsync) {
+                                        await Clipboard.setStringAsync(link.url);
+                                        setToastMessage('링크가 복사되었습니다');
+                                    } else {
+                                        setToastMessage('링크: ' + link.url);
+                                    }
+                                } catch (e) {
+                                    setToastMessage('링크: ' + link.url);
+                                }
+                                setShowToast(true);
+                                setTimeout(() => setShowToast(false), 3000);
                             }
                         }}>
                             <Ionicons name="copy-outline" size={20} color={colors.text} />
@@ -240,6 +259,60 @@ export function LinkCard({ link, onPress, onFavoriteToggle }: LinkCardProps) {
                                 원본 제목: {link.ogTitle}
                             </Text>
 
+                            {/* Thumbnail URL */}
+                            <Text style={[styles.editLabel, { color: colors.textSecondary, marginTop: 16 }]}>썸네일 URL</Text>
+                            <TextInput
+                                style={[styles.editInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                                value={editThumbnail}
+                                onChangeText={setEditThumbnail}
+                                placeholder="썸네일 URL"
+                                placeholderTextColor={colors.textSecondary}
+                            />
+                            {editThumbnail.trim() !== '' && (
+                                <Image
+                                    source={{ uri: editThumbnail }}
+                                    style={{ width: '100%', height: 150, borderRadius: 8, marginTop: 8, backgroundColor: colors.border }}
+                                    resizeMode="cover"
+                                />
+                            )}
+
+                            {/* Category Selection */}
+                            <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 16 }}>
+                                <Text style={[styles.editLabel, { color: colors.textSecondary, marginBottom: 8 }]}>카테고리</Text>
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                                    {categories
+                                        .filter((c) =>
+                                            c.id !== '00000000-0000-0000-0000-000000000001' && // favorites
+                                            c.id !== '00000000-0000-0000-0000-000000000005'    // uncategorized
+                                        )
+                                        .map((cat) => (
+                                            <TouchableOpacity
+                                                key={cat.id}
+                                                style={{
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    paddingHorizontal: 12,
+                                                    paddingVertical: 8,
+                                                    borderRadius: 16,
+                                                    backgroundColor: editCategory === cat.id ? colors.accent : colors.card,
+                                                    borderWidth: 1,
+                                                    borderColor: editCategory === cat.id ? colors.accent : colors.border,
+                                                }}
+                                                onPress={() => setEditCategory(cat.id)}
+                                            >
+                                                <Text style={{ fontSize: 14, marginRight: 4 }}>{cat.icon}</Text>
+                                                <Text style={{
+                                                    fontSize: 13,
+                                                    fontWeight: '500',
+                                                    color: editCategory === cat.id ? '#000' : colors.text
+                                                }}>
+                                                    {cat.name}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                </View>
+                            </View>
+
                             {/* Public Toggle */}
                             <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 16 }}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -273,10 +346,10 @@ export function LinkCard({ link, onPress, onFavoriteToggle }: LinkCardProps) {
                         </View>
                     </View>
                 </View>
-            </Modal>
+            </Modal >
 
             {/* Delete Confirmation Modal */}
-            <Modal
+            < Modal
                 visible={showDeleteModal}
                 transparent
                 animationType="fade"
@@ -304,17 +377,19 @@ export function LinkCard({ link, onPress, onFavoriteToggle }: LinkCardProps) {
                         </View>
                     </View>
                 </View>
-            </Modal>
+            </Modal >
 
             {/* Toast Notification */}
-            {showToast && (
-                <View style={styles.toastContainer}>
-                    <View style={[styles.toast, { backgroundColor: colors.accent }]}>
-                        <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                        <Text style={styles.toastText}>{toastMessage}</Text>
+            {
+                showToast && (
+                    <View style={styles.toastContainer}>
+                        <View style={[styles.toast, { backgroundColor: colors.accent }]}>
+                            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                            <Text style={styles.toastText}>{toastMessage}</Text>
+                        </View>
                     </View>
-                </View>
-            )}
+                )
+            }
         </>
     );
 }
@@ -511,5 +586,20 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 14,
         fontWeight: '600',
+    },
+    newBadge: {
+        position: 'absolute',
+        top: 8,
+        left: 8,
+        backgroundColor: '#FF4757',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 4,
+        zIndex: 10,
+    },
+    newBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
 });

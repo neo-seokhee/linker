@@ -26,14 +26,8 @@ export interface User {
     name: string;
 }
 
-// Default categories
+// Default categories (no favorites - now handled as a filter in storage tab)
 export const DEFAULT_CATEGORIES: Category[] = [
-    {
-        id: 'favorites',
-        name: '즐겨찾기',
-        icon: '⭐',
-        keywords: [],
-    },
     {
         id: 'news',
         name: '뉴스',

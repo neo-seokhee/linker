@@ -1,21 +1,21 @@
 // CategoryManagementModal - Add, edit, delete, reorder categories with drag handle
-import React, { useState, useEffect } from 'react';
+import Colors from '@/constants/Colors';
+import { Category } from '@/constants/types';
+import { useAppSettings } from '@/hooks/useAppSettings';
+import { useLinks } from '@/hooks/useLinks';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
 import {
-    View,
+    Alert,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    Modal,
-    StyleSheet,
-    ScrollView,
-    Alert,
-    Platform,
+    View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import Colors from '@/constants/Colors';
-import { Category } from '@/constants/types';
-import { useLinks } from '@/hooks/useLinks';
-import { useAppSettings } from '@/hooks/useAppSettings';
 
 interface CategoryManagementModalProps {
     visible: boolean;
@@ -36,12 +36,14 @@ export function CategoryManagementModal({ visible, onClose }: CategoryManagement
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
     // Sync with global categories when modal opens
-    // Separate favorites (pinned at top) from other categories
+    // Exclude favorites category (now handled as filter, not a category)
     useEffect(() => {
         if (visible) {
-            const favCategory = categories.find(c => c.id === 'favorites');
-            const otherCategories = categories.filter(c => c.id !== 'favorites');
-            setLocalCategories(favCategory ? [favCategory, ...otherCategories] : otherCategories);
+            // Filter out any favorites category (by id or name)
+            const filteredCategories = categories.filter(c =>
+                c.id !== 'favorites' && c.name !== '즐겨찾기'
+            );
+            setLocalCategories(filteredCategories);
         }
     }, [visible, categories]);
 

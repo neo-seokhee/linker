@@ -1,6 +1,6 @@
 // Storage Page - Main tab showing all saved links by category
 import { AddLinkModal } from '@/components/AddLinkModal';
-import { CategorySection } from '@/components/CategorySection';
+import { CategorySection, isNewLink } from '@/components/CategorySection';
 import { FloatingButton } from '@/components/FloatingButton';
 import { LoginScreen } from '@/components/LoginScreen';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -9,15 +9,16 @@ import { Link } from '@/constants/types';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useAuth } from '@/hooks/useAuth';
 import { useLinks } from '@/hooks/useLinks';
+import { openLink } from '@/utils/openLink';
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Linking,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +35,12 @@ export default function StoragePage() {
 
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showNewOnly, setShowNewOnly] = useState(false);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+
+  // Count new links and favorites
+  const newLinksCount = links.filter(link => isNewLink(link.createdAt)).length;
+  const favoritesCount = links.filter(link => link.isFavorite).length;
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -44,12 +51,8 @@ export default function StoragePage() {
   }, []);
 
   const handleLinkPress = (link: Link) => {
-    // Open link in new tab (web) or external browser (native)
-    if (Platform.OS === 'web') {
-      window.open(link.url, '_blank');
-    } else {
-      Linking.openURL(link.url);
-    }
+    // Open link in new tab (web) or in-app browser (native)
+    openLink(link.url);
   };
 
   // Show login screen if not authenticated
@@ -70,6 +73,68 @@ export default function StoragePage() {
       <View style={styles.mobileContainer}>
         {/* Header */}
         <ScreenHeader />
+
+        {/* Filter Bar */}
+        {(newLinksCount > 0 || favoritesCount > 0) && (
+          <View style={styles.filterBar}>
+            {/* NEW Filter */}
+            {newLinksCount > 0 && (
+              <TouchableOpacity
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: showNewOnly ? '#FF4757' : colors.card,
+                    borderColor: showNewOnly ? '#FF4757' : colors.border,
+                  }
+                ]}
+                onPress={() => {
+                  setShowNewOnly(!showNewOnly);
+                  if (!showNewOnly) setShowFavoritesOnly(false);
+                }}
+              >
+                <Text style={[
+                  styles.newBadgeText,
+                  { color: showNewOnly ? '#FFF' : '#FF4757' }
+                ]}>NEW</Text>
+                <Text style={[
+                  styles.filterText,
+                  { color: showNewOnly ? '#FFF' : colors.text }
+                ]}>
+                  {newLinksCount}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Favorites Filter */}
+            {favoritesCount > 0 && (
+              <TouchableOpacity
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: showFavoritesOnly ? colors.accentAlt : colors.card,
+                    borderColor: showFavoritesOnly ? colors.accentAlt : colors.border,
+                  }
+                ]}
+                onPress={() => {
+                  setShowFavoritesOnly(!showFavoritesOnly);
+                  if (!showFavoritesOnly) setShowNewOnly(false);
+                }}
+              >
+                <Ionicons
+                  name={showFavoritesOnly ? 'star' : 'star-outline'}
+                  size={14}
+                  color={showFavoritesOnly ? '#000' : colors.accentAlt}
+                />
+                <Text style={[
+                  styles.filterText,
+                  { color: showFavoritesOnly ? '#000' : colors.text }
+                ]}>
+                  즐겨찾기 {favoritesCount}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {/* Content */}
         <ScrollView
@@ -95,10 +160,30 @@ export default function StoragePage() {
             </View>
           ) : (
             categories.map((category) => {
-              const categoryLinks = getLinksForCategory(category.id);
+              let categoryLinks = getLinksForCategory(category.id);
+
+              // Apply NEW filter if enabled
+              if (showNewOnly) {
+                categoryLinks = categoryLinks.filter(link => isNewLink(link.createdAt));
+              }
+
+              // Apply favorites filter if enabled
+              if (showFavoritesOnly) {
+                categoryLinks = categoryLinks.filter(link => link.isFavorite);
+              }
+
+              // Skip favorites category (handled as filter now)
+              if (category.id === 'favorites' || category.name === '즐겨찾기') {
+                return null;
+              }
 
               // Hide uncategorized category if it has no links
               if (category.id === '00000000-0000-0000-0000-000000000005' && categoryLinks.length === 0) {
+                return null;
+              }
+
+              // Skip categories with no links after filtering
+              if (categoryLinks.length === 0) {
                 return null;
               }
 
@@ -172,5 +257,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  filterBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 6,
+  },
+  filterText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  newBadgeInFilter: {
+    // placeholder for NEW badge styling in filter
+  },
+  newBadgeText: {
+    fontSize: 11,
+    fontWeight: 'bold',
   },
 });

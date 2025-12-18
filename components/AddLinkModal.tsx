@@ -6,6 +6,7 @@ import { useLinks } from '@/hooks/useLinks';
 import { getMatchingCategories, suggestCategory } from '@/utils/categoryMatcher';
 import { fetchOGData, isValidUrl, normalizeUrl, OGData } from '@/utils/ogParser';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -35,6 +36,7 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
 
     const [url, setUrl] = useState('');
     const [customTitle, setCustomTitle] = useState(''); // User-editable title
+    const [customThumbnail, setCustomThumbnail] = useState(''); // User-editable thumbnail
     const [ogData, setOgData] = useState<OGData | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<string>(''); // empty = will use uncategorized in addLink
     const [suggestedCategories, setSuggestedCategories] = useState<string[]>([]);
@@ -46,8 +48,22 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
     const [newCategoryName, setNewCategoryName] = useState('');
     const [selectedEmoji, setSelectedEmoji] = useState('📁');
 
-    // Public/Private toggle (default: public)
-    const [isPublic, setIsPublic] = useState(true);
+    // Public/Private toggle (default: private, persisted)
+    const [isPublic, setIsPublic] = useState(false);
+
+    // Load saved public setting on mount
+    useEffect(() => {
+        AsyncStorage.getItem('addLink_isPublic').then(value => {
+            if (value !== null) {
+                setIsPublic(value === 'true');
+            }
+        });
+    }, []);
+
+    // Save public setting when it changes
+    useEffect(() => {
+        AsyncStorage.setItem('addLink_isPublic', isPublic ? 'true' : 'false');
+    }, [isPublic]);
 
 
     // Reset state when modal closes
@@ -55,6 +71,7 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
         if (!visible) {
             setUrl('');
             setCustomTitle('');
+            setCustomThumbnail('');
             setOgData(null);
             setSelectedCategory(''); // empty = will use uncategorized in addLink
             setSuggestedCategories([]);
@@ -63,6 +80,7 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
             setIsAddingCategory(false);
             setNewCategoryName('');
             setSelectedEmoji('📁');
+            // NOTE: isPublic is NOT reset - it persists across sessions
         }
     }, [visible]);
 
@@ -86,6 +104,7 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
             try {
                 const data = await fetchOGData(normalizedUrl);
                 setOgData(data);
+                setCustomThumbnail(data.image || ''); // Auto-fill thumbnail
 
                 // Get category suggestions
                 const matches = getMatchingCategories(data.title, normalizedUrl, categories);
@@ -114,7 +133,7 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
             url: normalizedUrl,
             ogTitle: ogData.title,
             customTitle: customTitle.trim() || undefined, // Only save if user entered a custom title
-            ogImage: ogData.image,
+            ogImage: customThumbnail.trim() || ogData.image, // Use custom if set, otherwise OG
             ogDescription: ogData.description,
             categoryId: selectedCategory,
             isFavorite: false,
@@ -151,8 +170,9 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
             onRequestClose={onClose}
         >
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior="padding"
                 style={styles.overlay}
+                keyboardVerticalOffset={Platform.OS === 'android' ? -200 : 0}
             >
                 <View style={[styles.container, { backgroundColor: colors.background }]}>
                     {/* Header */}
@@ -201,7 +221,7 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
                             <>
                                 <View style={[styles.preview, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                     <Image
-                                        source={{ uri: ogData.image }}
+                                        source={{ uri: customThumbnail.trim() || ogData.image }}
                                         style={styles.previewImage}
                                         resizeMode="cover"
                                     />
@@ -240,6 +260,25 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
                                         비워두면 원본 제목이 사용됩니다
                                     </Text>
                                 </View>
+
+                                {/* Thumbnail URL Input */}
+                                <View style={{ marginTop: 16 }}>
+                                    <Text style={[styles.label, { color: colors.textSecondary }]}>썸네일 URL</Text>
+                                    <TextInput
+                                        style={[
+                                            styles.input,
+                                            {
+                                                backgroundColor: colors.card,
+                                                color: colors.text,
+                                                borderColor: colors.border,
+                                            },
+                                        ]}
+                                        placeholder="썸네일 URL (자동 입력됨, 수정 가능)"
+                                        placeholderTextColor={colors.textSecondary}
+                                        value={customThumbnail}
+                                        onChangeText={setCustomThumbnail}
+                                    />
+                                </View>
                             </>
                         )}
 
@@ -249,44 +288,6 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
                                 <Text style={[styles.label, { color: colors.textSecondary, marginTop: 20 }]}>
                                     카테고리
                                 </Text>
-
-                                {/* Suggested Categories */}
-                                {suggestedCategories.length > 0 && (
-                                    <View style={styles.suggestedContainer}>
-                                        <Text style={[styles.suggestedLabel, { color: colors.accent }]}>
-                                            ✨ 추천
-                                        </Text>
-                                        <View style={styles.categoryChips}>
-                                            {suggestedCategories.map((catId) => {
-                                                const cat = getCategoryById(catId);
-                                                if (!cat) return null;
-                                                return (
-                                                    <TouchableOpacity
-                                                        key={catId}
-                                                        style={[
-                                                            styles.categoryChip,
-                                                            {
-                                                                backgroundColor: selectedCategory === catId ? colors.accent : colors.card,
-                                                                borderColor: selectedCategory === catId ? colors.accent : colors.border,
-                                                            },
-                                                        ]}
-                                                        onPress={() => setSelectedCategory(catId)}
-                                                    >
-                                                        <Text style={styles.categoryIcon}>{cat.icon}</Text>
-                                                        <Text
-                                                            style={[
-                                                                styles.categoryName,
-                                                                { color: selectedCategory === catId ? '#000' : colors.text },
-                                                            ]}
-                                                        >
-                                                            {cat.name}
-                                                        </Text>
-                                                    </TouchableOpacity>
-                                                );
-                                            })}
-                                        </View>
-                                    </View>
-                                )}
 
                                 {/* All Categories + Add Button */}
                                 <View style={styles.categoryChips}>
@@ -378,9 +379,16 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
                             </>
                         )}
 
-                        {/* Public/Private Toggle */}
+
+
+                        <View style={{ height: 60 }} />
+                    </ScrollView>
+
+                    {/* Fixed Bottom with Public Toggle + Save Button */}
+                    <View style={[styles.bottomButtonContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+                        {/* Public Toggle */}
                         {ogData && (
-                            <View style={[styles.publicToggleContainer, { borderColor: colors.border }]}>
+                            <View style={[styles.publicToggleContainer, { borderColor: colors.border, marginBottom: 12 }]}>
                                 <View style={styles.publicToggleContent}>
                                     <Ionicons
                                         name={isPublic ? 'globe-outline' : 'lock-closed-outline'}
@@ -410,12 +418,6 @@ export function AddLinkModal({ visible, onClose }: AddLinkModalProps) {
                                 </TouchableOpacity>
                             </View>
                         )}
-
-                        <View style={{ height: 100 }} />
-                    </ScrollView>
-
-                    {/* Fixed Bottom Save Button */}
-                    <View style={[styles.bottomButtonContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
                         <TouchableOpacity
                             onPress={handleSave}
                             disabled={!ogData || isLoading}
@@ -470,9 +472,8 @@ const styles = StyleSheet.create({
     },
     bottomButtonContainer: {
         paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingTop: 8,
         paddingBottom: 24,
-        borderTopWidth: 1,
     },
     bottomSaveButton: {
         paddingVertical: 16,
@@ -630,8 +631,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingVertical: 16,
-        borderTopWidth: 1,
-        marginTop: 16,
+        marginTop: 0,
     },
     publicToggleContent: {
         flexDirection: 'row',
