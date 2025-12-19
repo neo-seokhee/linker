@@ -9,6 +9,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLinks } from '@/hooks/useLinks';
 import { useProfile } from '@/hooks/useProfile';
 import { supabase } from '@/utils/supabaseClient';
+import analytics from '@/utils/analytics/analytics';
+import { checkConsent, setConsent } from '@/utils/analytics/consent';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -55,6 +57,7 @@ export default function SettingsPage() {
     const [isSendingFeedback, setIsSendingFeedback] = useState(false);
     const [defaultAvatars, setDefaultAvatars] = useState<{ id: string; url: string; label: string }[]>([]);
     const [newsletterEnabled, setNewsletterEnabled] = useState(false);
+    const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
 
     // Sync newsletter state from profile
     React.useEffect(() => {
@@ -74,6 +77,15 @@ export default function SettingsPage() {
             fetchNewsletterStatus();
         }
     }, [profile, user]);
+
+    // Load analytics consent on mount
+    React.useEffect(() => {
+        const loadAnalyticsConsent = async () => {
+            const consent = await checkConsent();
+            setAnalyticsEnabled(consent);
+        };
+        loadAnalyticsConsent();
+    }, []);
 
     // Supabase Edge Function URL for feedback
     const FEEDBACK_FUNCTION_URL = 'https://tfvgbybllozijozncser.supabase.co/functions/v1/send-feedback';
@@ -442,6 +454,32 @@ export default function SettingsPage() {
                                     }
                                 />
                             )}
+                            <SettingItem
+                                icon="analytics-outline"
+                                title="분석 데이터 수집"
+                                subtitle="앱 개선을 위한 사용 데이터 수집"
+                                showArrow={false}
+                                onPress={async () => {
+                                    const newValue = !analyticsEnabled;
+                                    setAnalyticsEnabled(newValue);
+                                    await setConsent(newValue);
+                                    await analytics.setEnabled(newValue);
+                                    showToastNotification(newValue ? '분석 데이터 수집이 활성화되었습니다' : '분석 데이터 수집이 해제되었습니다');
+                                }}
+                                rightComponent={
+                                    <Switch
+                                        value={analyticsEnabled}
+                                        onValueChange={async (value) => {
+                                            setAnalyticsEnabled(value);
+                                            await setConsent(value);
+                                            await analytics.setEnabled(value);
+                                            showToastNotification(value ? '분석 데이터 수집이 활성화되었습니다' : '분석 데이터 수집이 해제되었습니다');
+                                        }}
+                                        trackColor={{ false: colors.border, true: colors.accent }}
+                                        thumbColor={analyticsEnabled ? '#fff' : '#f4f3f4'}
+                                    />
+                                }
+                            />
                             <SettingItem
                                 icon={isDarkMode ? 'moon' : 'sunny'}
                                 title="테마"

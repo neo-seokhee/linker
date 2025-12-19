@@ -9,8 +9,12 @@ import { Link } from '@/constants/types';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useAuth } from '@/hooks/useAuth';
 import { useLinks } from '@/hooks/useLinks';
+import { useScrollDepth } from '@/hooks/analytics/useScrollDepth';
 import { openLink } from '@/utils/openLink';
+import analytics from '@/utils/analytics/analytics';
+import { ANALYTICS_EVENTS } from '@/utils/analytics/events';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -38,6 +42,16 @@ export default function StoragePage() {
   const [showNewOnly, setShowNewOnly] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
+  // Analytics tracking
+  const { trackScrollDepth, resetMilestones } = useScrollDepth('storage');
+
+  // Reset scroll tracking when tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      resetMilestones();
+    }, [resetMilestones])
+  );
+
   // Count new links and favorites
   const newLinksCount = links.filter(link => isNewLink(link.createdAt)).length;
   const favoritesCount = links.filter(link => link.isFavorite).length;
@@ -51,6 +65,17 @@ export default function StoragePage() {
   }, []);
 
   const handleLinkPress = (link: Link) => {
+    // Track link click
+    analytics.logEvent(ANALYTICS_EVENTS.LINK_CLICK, {
+      link_id: link.id,
+      link_url: analytics.hashUrl(link.url),
+      link_title: link.ogTitle || link.url,
+      category: link.categoryId,
+      position: 0, // Position within category not tracked in storage
+      source: 'storage',
+      is_liked: link.isFavorite,
+    });
+
     // Open link in new tab (web) or in-app browser (native)
     openLink(link.url);
   };
@@ -141,6 +166,10 @@ export default function StoragePage() {
           style={styles.content}
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
+          onScroll={({ nativeEvent }) => {
+            trackScrollDepth(nativeEvent);
+          }}
+          scrollEventThrottle={400}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

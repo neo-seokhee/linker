@@ -4,12 +4,15 @@ import { Category } from '@/constants/types';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useAuth } from '@/hooks/useAuth';
 import { useLinks } from '@/hooks/useLinks';
+import analytics from '@/utils/analytics/analytics';
+import { ANALYTICS_EVENTS } from '@/utils/analytics/events';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -34,6 +37,7 @@ interface InAppBrowserModalProps {
     onClose: () => void;
     onLike?: (id: string) => void;
     isLiked?: boolean;
+    source?: 'explore_feed' | 'storage' | 'featured' | 'top10';
 }
 
 export function InAppBrowserModal({
@@ -42,6 +46,7 @@ export function InAppBrowserModal({
     onClose,
     onLike,
     isLiked = false,
+    source = 'explore_feed',
 }: InAppBrowserModalProps) {
     const { effectiveTheme } = useAppSettings();
     const colors = Colors[effectiveTheme];
@@ -55,7 +60,36 @@ export function InAppBrowserModal({
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
+    // Dwell time tracking (Native only)
+    const openTimestampRef = useRef<number>(0);
+
+    // Track modal open time
+    useEffect(() => {
+        if (visible && linkInfo && Platform.OS !== 'web') {
+            openTimestampRef.current = Date.now();
+        }
+    }, [visible, linkInfo]);
+
     if (!linkInfo) return null;
+
+    // Track dwell time and close modal
+    const handleClose = () => {
+        // Track dwell time on native only
+        if (Platform.OS !== 'web' && openTimestampRef.current > 0) {
+            const dwellTime = (Date.now() - openTimestampRef.current) / 1000;
+
+            analytics.logEvent(ANALYTICS_EVENTS.LINK_DWELL, {
+                link_id: linkInfo.id,
+                duration_seconds: Math.round(dwellTime),
+                is_engaged: dwellTime > 30,
+                source: source,
+            });
+
+            openTimestampRef.current = 0;
+        }
+
+        onClose();
+    };
 
     const handleLike = () => {
         if (!session) {
@@ -108,7 +142,7 @@ export function InAppBrowserModal({
             visible={visible}
             animationType="slide"
             presentationStyle="fullScreen"
-            onRequestClose={onClose}
+            onRequestClose={handleClose}
         >
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 {/* Header */}
@@ -122,7 +156,7 @@ export function InAppBrowserModal({
                 ]}>
                     <TouchableOpacity
                         style={[styles.backButton, { backgroundColor: colors.card }]}
-                        onPress={onClose}
+                        onPress={handleClose}
                     >
                         <Ionicons name="chevron-back" size={24} color={colors.text} />
                     </TouchableOpacity>

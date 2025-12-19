@@ -8,6 +8,10 @@ import { useAppSettings } from '@/hooks/useAppSettings';
 import { useAuth } from '@/hooks/useAuth';
 import { useExplore } from '@/hooks/useExplore';
 import { useLinks } from '@/hooks/useLinks';
+import { useImpressionTracking } from '@/hooks/analytics/useImpressionTracking';
+import { useScrollDepth } from '@/hooks/analytics/useScrollDepth';
+import analytics from '@/utils/analytics/analytics';
+import { ANALYTICS_EVENTS } from '@/utils/analytics/events';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -164,12 +168,24 @@ export default function ExploreScreen() {
     const [featuredIndex, setFeaturedIndex] = useState(0);
     const [isTop10Sticky, setIsTop10Sticky] = useState(false);
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
-    const [browserLink, setBrowserLink] = useState<{ id: string; url: string; title: string; isLiked: boolean } | null>(null);
+    const [browserLink, setBrowserLink] = useState<{ id: string; url: string; title: string; isLiked: boolean; source: 'explore_feed' | 'storage' | 'featured' | 'top10' } | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
 
     const scrollViewRef = useRef<ScrollView>(null);
     const fadeAnim = useRef(new Animated.Value(1)).current;
+
+    // Analytics tracking hooks
+    const { saveItemPosition, trackImpressions, resetImpressions } = useImpressionTracking();
+    const { trackScrollDepth, resetMilestones } = useScrollDepth('explore_feed');
+
+    // Reset tracking when tab comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            resetImpressions();
+            resetMilestones();
+        }, [resetImpressions, resetMilestones])
+    );
 
     // Auto-scroll Top 10 every 2 seconds with fade animation
     useEffect(() => {
@@ -205,6 +221,19 @@ export default function ExploreScreen() {
             setShowLoginPrompt(true);
             return;
         }
+
+        // Find the item to get its details for analytics
+        const item = feedData.find(f => f.id === itemId) || TOP_10_DATA.find(t => t.id === itemId);
+        if (item) {
+            analytics.logEvent(ANALYTICS_EVENTS.LINK_LIKE, {
+                link_id: itemId,
+                link_url: analytics.hashUrl(item.url),
+                link_title: item.title,
+                category: 'category' in item ? item.category : item.autoCategory,
+                source: 'explore_feed',
+            });
+        }
+
         toggleLike(itemId);
     };
 
@@ -224,6 +253,15 @@ export default function ExploreScreen() {
 
     const handleConfirmSave = async () => {
         if (!selectedSaveItem || !selectedCategory) return;
+
+        // Track save event
+        analytics.logEvent(ANALYTICS_EVENTS.LINK_SAVE, {
+            link_id: selectedSaveItem.id,
+            link_url: analytics.hashUrl(selectedSaveItem.url),
+            link_title: selectedSaveItem.title,
+            category: selectedSaveItem.autoCategory,
+            source: 'explore_feed',
+        });
 
         await addLink({
             url: selectedSaveItem.url,
@@ -296,14 +334,25 @@ export default function ExploreScreen() {
         );
     };
 
-    const renderFeedItem = (item: ExploreFeedItem, isCarousel: boolean = false) => {
+    const renderFeedItem = (item: ExploreFeedItem, isCarousel: boolean = false, position: number = 0, source: 'explore_feed' | 'featured' = 'explore_feed') => {
         const isLiked = item.isLiked; // Use isLiked from data, not local state
 
         const handleOpenLink = () => {
+            // Track click event
+            analytics.logEvent(ANALYTICS_EVENTS.LINK_CLICK, {
+                link_id: item.id,
+                link_url: analytics.hashUrl(item.url),
+                link_title: item.title,
+                category: item.autoCategory,
+                position: position,
+                source: source,
+                is_liked: isLiked,
+            });
+
             if (Platform.OS === 'web') {
                 window.open(item.url, '_blank');
             } else {
-                setBrowserLink({ id: item.id, url: item.url, title: item.title, isLiked: item.isLiked });
+                setBrowserLink({ id: item.id, url: item.url, title: item.title, isLiked: item.isLiked, source: source });
             }
         };
 
@@ -315,6 +364,13 @@ export default function ExploreScreen() {
                     { backgroundColor: colors.card, borderColor: colors.border }
                 ]}
                 onPress={handleOpenLink}
+                onLayout={(event) => {
+                    if (!isCarousel) {
+                        // Save position for impression tracking (only for feed items, not carousel)
+                        const { y, height } = event.nativeEvent.layout;
+                        saveItemPosition(item.id, y, height);
+                    }
+                }}
                 activeOpacity={0.8}
             >
                 <Image source={{ uri: item.thumbnail }} style={styles.feedThumbnail} />
@@ -404,10 +460,21 @@ export default function ExploreScreen() {
                                         <TouchableOpacity
                                             style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
                                             onPress={() => {
+                                                // Track Top 10 click
+                                                analytics.logEvent(ANALYTICS_EVENTS.LINK_CLICK, {
+                                                    link_id: item.id,
+                                                    link_url: analytics.hashUrl(item.url),
+                                                    link_title: item.title,
+                                                    category: item.category,
+                                                    position: item.rank - 1,
+                                                    source: 'top10',
+                                                    is_liked: item.isLiked || false,
+                                                });
+
                                                 if (Platform.OS === 'web') {
                                                     window.open(item.url, '_blank');
                                                 } else {
-                                                    setBrowserLink({ id: item.id, url: item.url, title: item.title, isLiked: item.isLiked || false });
+                                                    setBrowserLink({ id: item.id, url: item.url, title: item.title, isLiked: item.isLiked || false, source: 'top10' });
                                                 }
                                             }}
                                         >
@@ -457,11 +524,23 @@ export default function ExploreScreen() {
                                     <TouchableOpacity
                                         style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
                                         onPress={() => {
+                                            const item = TOP_10_DATA[currentTop10Index];
+
+                                            // Track Top 10 click
+                                            analytics.logEvent(ANALYTICS_EVENTS.LINK_CLICK, {
+                                                link_id: item.id,
+                                                link_url: analytics.hashUrl(item.url),
+                                                link_title: item.title,
+                                                category: item.category,
+                                                position: item.rank - 1,
+                                                source: 'top10',
+                                                is_liked: item.isLiked || false,
+                                            });
+
                                             if (Platform.OS === 'web') {
-                                                window.open(TOP_10_DATA[currentTop10Index].url, '_blank');
+                                                window.open(item.url, '_blank');
                                             } else {
-                                                const item = TOP_10_DATA[currentTop10Index];
-                                                setBrowserLink({ id: item.id, url: item.url, title: item.title, isLiked: item.isLiked || false });
+                                                setBrowserLink({ id: item.id, url: item.url, title: item.title, isLiked: item.isLiked || false, source: 'top10' });
                                             }
                                         }}
                                     >
@@ -535,6 +614,20 @@ export default function ExploreScreen() {
                             if (isCloseToBottom) {
                                 loadMore();
                             }
+
+                            // Track scroll depth
+                            trackScrollDepth(nativeEvent);
+
+                            // Track impressions
+                            const impressionItems = filteredFeedData.map((item, index) => ({
+                                id: item.id,
+                                url: item.url,
+                                title: item.title,
+                                category: item.autoCategory,
+                                position: index,
+                                source: 'explore_feed' as const,
+                            }));
+                            trackImpressions(impressionItems, contentOffset.y);
                         }}
                         scrollEventThrottle={400}
                     >
@@ -557,7 +650,7 @@ export default function ExploreScreen() {
                                         }}
                                         contentContainerStyle={styles.featuredCarouselContent}
                                     >
-                                        {FEATURED_DATA.map((item) => renderFeedItem(item, true))}
+                                        {FEATURED_DATA.map((item, index) => renderFeedItem(item, true, index, 'featured'))}
                                     </ScrollView>
                                     <View style={styles.carouselDots}>
                                         {FEATURED_DATA.map((_, index) => (
@@ -619,7 +712,7 @@ export default function ExploreScreen() {
 
                             {/* Feed Items */}
                             {filteredFeedData.length > 0 ? (
-                                filteredFeedData.map((item) => renderFeedItem(item))
+                                filteredFeedData.map((item, index) => renderFeedItem(item, false, index, 'explore_feed'))
                             ) : (
                                 <View style={{ paddingHorizontal: 20, paddingVertical: 40 }}>
                                     <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center' }}>
@@ -710,6 +803,7 @@ export default function ExploreScreen() {
                             toggleLike(id);
                         }}
                         isLiked={browserLink ? feedData.find(f => f.id === browserLink.id)?.isLiked || TOP_10_DATA.find(t => t.id === browserLink.id)?.isLiked || false : false}
+                        source={browserLink?.source || 'explore_feed'}
                     />
                 </>
             )}

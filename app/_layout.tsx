@@ -10,6 +10,7 @@ import 'react-native-reanimated';
 import { AppSettingsProvider, useAppSettings } from '@/hooks/useAppSettings';
 import { AuthProvider } from '@/hooks/useAuth';
 import { LinksProvider } from '@/hooks/useLinks';
+import { AnalyticsProvider } from '@/components/tracking/AnalyticsProvider';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -48,7 +49,9 @@ export default function RootLayout() {
   return (
     <AppSettingsProvider>
       <AuthProvider>
-        <RootLayoutNav />
+        <AnalyticsProvider>
+          <RootLayoutNav />
+        </AnalyticsProvider>
       </AuthProvider>
     </AppSettingsProvider>
   );

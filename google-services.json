@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1070550035632",
+    "project_id": "linker-f29d4",
+    "storage_bucket": "linker-f29d4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1070550035632:android:583e8bb074e04271e9df75",
+        "android_client_info": {
+          "package_name": "com.forge.linker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCTHti_1z9lYot6FH6m3QCXVYj2eDZlhfQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
