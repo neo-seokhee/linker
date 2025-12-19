@@ -1,10 +1,28 @@
 // Supabase Client Configuration
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 const supabaseUrl = 'https://tfvgbybllozijozncser.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmdmdieWJsbG96aWpvem5jc2VyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzMjM4OTcsImV4cCI6MjA4MDg5OTg5N30.Fxxl4dZfSAXhpGayMcXCb7gN3nv-VSDwQrTw42n1Tnw';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Configure storage based on platform
+const storage = Platform.OS === 'web'
+    ? undefined  // Use default localStorage on web
+    : {
+        getItem: (key: string) => AsyncStorage.getItem(key),
+        setItem: (key: string, value: string) => AsyncStorage.setItem(key, value),
+        removeItem: (key: string) => AsyncStorage.removeItem(key),
+    };
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+        storage: storage,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: Platform.OS === 'web',
+    },
+});
 
 // Database Types (matching Supabase schema)
 export interface DbCategory {
