@@ -52,13 +52,22 @@ export function InAppBrowserModal({
     const colors = Colors[effectiveTheme];
     const insets = useSafeAreaInsets();
     const { session } = useAuth();
-    const { addLink, categories } = useLinks();
+    const { addLink, categories, links } = useLinks();
 
     const [isLoading, setIsLoading] = useState(true);
     const [currentTitle, setCurrentTitle] = useState(linkInfo?.title || '');
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSaved, setIsSaved] = useState(false);
+
+    // Check if this link is already saved
+    useEffect(() => {
+        if (linkInfo && links.length > 0) {
+            const alreadySaved = links.some(link => link.url === linkInfo.url);
+            setIsSaved(alreadySaved);
+        }
+    }, [linkInfo, links]);
 
     // Dwell time tracking (Native only)
     const openTimestampRef = useRef<number>(0);
@@ -102,6 +111,10 @@ export function InAppBrowserModal({
     const handleSave = () => {
         if (!session) {
             setShowLoginPrompt(true);
+            return;
+        }
+        if (isSaved) {
+            Alert.alert('알림', '이미 보관함에 저장된 링크입니다.');
             return;
         }
         setShowCategoryPicker(true);
@@ -257,25 +270,27 @@ export function InAppBrowserModal({
                                 카테고리 선택
                             </Text>
                             <ScrollView style={styles.categoryList} showsVerticalScrollIndicator={false}>
-                                {categories.map((category: Category) => (
-                                    <TouchableOpacity
-                                        key={category.id}
-                                        style={[
-                                            styles.categoryItem,
-                                            { backgroundColor: colors.card, borderColor: colors.border }
-                                        ]}
-                                        onPress={() => handleConfirmSave(category.id)}
-                                        disabled={isSaving}
-                                    >
-                                        <Text style={styles.categoryIcon}>{category.icon}</Text>
-                                        <Text style={[styles.categoryName, { color: colors.text }]}>
-                                            {category.name}
-                                        </Text>
-                                        {isSaving && (
-                                            <ActivityIndicator size="small" color={colors.accent} />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
+                                {categories
+                                    .filter((category: Category) => category.id !== 'favorites' && category.name !== '즐겨찾기')
+                                    .map((category: Category) => (
+                                        <TouchableOpacity
+                                            key={category.id}
+                                            style={[
+                                                styles.categoryItem,
+                                                { backgroundColor: colors.card, borderColor: colors.border }
+                                            ]}
+                                            onPress={() => handleConfirmSave(category.id)}
+                                            disabled={isSaving}
+                                        >
+                                            <Text style={styles.categoryIcon}>{category.icon}</Text>
+                                            <Text style={[styles.categoryName, { color: colors.text }]}>
+                                                {category.name}
+                                            </Text>
+                                            {isSaving && (
+                                                <ActivityIndicator size="small" color={colors.accent} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
                             </ScrollView>
                         </View>
                     </View>

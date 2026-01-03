@@ -1,0 +1,17 @@
+name: Feed Collector
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  collect-feeds:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Feed Collector Edge Function
+        run: |
+          curl -X POST "${{ secrets.SUPABASE_FUNCTION_URL }}/feed-collector" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json"
