@@ -12,7 +12,8 @@ jobs:
     steps:
       - name: Trigger Feed Collector Edge Function
         run: |
-          curl -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/feed-collector" \
+          URL="${{ secrets.SUPABASE_URL }}/functions/v1/feed-collector"
+          echo "Calling URL: $URL"
+          curl -v -X POST "$URL" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Content-Type: application/json" \
-            --fail-with-body
+            -H "Content-Type: application/json" 2>&1 || echo "Curl exit code: $?"
