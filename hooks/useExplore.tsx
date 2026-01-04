@@ -246,8 +246,12 @@ export function useExplore(): UseExploreReturn {
             curated.profile_image
         ));
 
+        // Deduplicate by URL - curated links take priority
+        const curatedUrls = new Set(curatedFeedLinks.map(link => link.url));
+        const dedupedUserLinks = userFeedLinks.filter(link => !curatedUrls.has(link.url));
+
         // Combine and sort by created_at
-        const allLinks = [...userFeedLinks, ...curatedFeedLinks].sort((a, b) =>
+        const allLinks = [...curatedFeedLinks, ...dedupedUserLinks].sort((a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
 
@@ -321,12 +325,18 @@ export function useExplore(): UseExploreReturn {
             const userIds = allUserLinks.map(l => l.user_id).filter(Boolean);
             const profileMap = await getProfilesByUserIds(userIds);
 
+            // Get curated URLs for deduplication
+            const curatedUrls = new Set((curatedLinks || []).map(c => c.url));
+
+            // Filter out user links that have same URL as curated links
+            const dedupedUserLinks = allUserLinks.filter(link => !curatedUrls.has(link.url));
+
             // Combine all links with scores
             type ScoredItem = { link: any; source: 'user' | 'curated'; totalScore: number; likes: number; nickname?: string; profileImage?: string };
             const scoredItems: ScoredItem[] = [];
 
-            // Add user links
-            allUserLinks.forEach(link => {
+            // Add deduped user links
+            dedupedUserLinks.forEach(link => {
                 const likes = likeCountMap[link.id] || 0;
                 const boost = link.boost_score || 0;
                 const profile = profileMap[link.user_id];
@@ -446,17 +456,22 @@ export function useExplore(): UseExploreReturn {
                 )
             );
 
-            // Transform user featured links with profile data
-            const userFeatured: ExploreLink[] = (userLinks || []).map(link => {
-                const profile = profileMap[link.user_id];
-                return transformLink(
-                    link,
-                    likeCountMap[link.id] || 0,
-                    likedLinks.has(link.id),
-                    profile?.nickname,
-                    profile?.avatarUrl
-                );
-            });
+            // Deduplicate by URL - curated links take priority
+            const curatedUrls = new Set(curatedFeatured.map(link => link.url));
+
+            // Transform user featured links with profile data (excluding duplicates)
+            const userFeatured: ExploreLink[] = (userLinks || [])
+                .filter(link => !curatedUrls.has(link.url))
+                .map(link => {
+                    const profile = profileMap[link.user_id];
+                    return transformLink(
+                        link,
+                        likeCountMap[link.id] || 0,
+                        likedLinks.has(link.id),
+                        profile?.nickname,
+                        profile?.avatarUrl
+                    );
+                });
 
             // Combine with curated first (higher priority)
             return [...curatedFeatured, ...userFeatured].slice(0, 10);
