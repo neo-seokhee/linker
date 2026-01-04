@@ -512,9 +512,20 @@ export default function AdminPage() {
             : true;
         if (!confirmed) return;
 
-        const { error } = await supabase.from('curated_links').delete().eq('id', id);
+        console.log('Attempting to delete curated link:', id);
+        
+        const { data, error, count } = await supabase
+            .from('curated_links')
+            .delete()
+            .eq('id', id)
+            .select();
+        
+        console.log('Delete result:', { data, error, count });
+        
         if (error) {
-            alert('삭제 실패: ' + error.message);
+            alert('삭제 실패: ' + error.message + '\n(DB 관리자가 아니라면 삭제 권한이 없을 수 있습니다)');
+        } else if (!data || data.length === 0) {
+            alert('삭제 실패: 권한이 없거나 이미 삭제된 항목입니다.\n(DB 관리자가 아니라면 삭제 권한이 없을 수 있습니다)');
         } else {
             loadCuratedLinks();
         }
