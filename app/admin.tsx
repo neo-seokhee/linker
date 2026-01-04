@@ -1104,20 +1104,21 @@ export default function AdminPage() {
         // Determine table based on user_id (null means curated_links)
         const tableName = link.user_id === null ? 'curated_links' : 'links';
 
-        // Perform delete and select the deleted record to verify
-        const { data, error } = await supabase
+        console.log('Deleting from table:', tableName, 'id:', linkId);
+
+        // Perform delete without .select() to avoid 400 error
+        const { error } = await supabase
             .from(tableName)
             .delete()
-            .eq('id', linkId)
-            .select();
+            .eq('id', linkId);
+
+        console.log('Delete result - error:', error);
 
         if (error) {
+            console.error('Delete error details:', JSON.stringify(error));
             alert('삭제 실패: ' + error.message);
-        } else if (!data || data.length === 0) {
-            // No error, but no data deleted -> Likely RLS restriction
-            alert('삭제 실패: 권한이 없거나 이미 삭제된 항목입니다.\n(DB 관리자가 아니라면 삭제 권한이 없을 수 있습니다)');
         } else {
-            // Success
+            // Success - remove from local state
             setLinks(prev => prev.filter(link => link.id !== linkId));
         }
     };
