@@ -513,21 +513,31 @@ export default function AdminPage() {
         if (!confirmed) return;
 
         console.log('Attempting to delete curated link:', id);
-        
-        const { data, error, count } = await supabase
+
+        // Simple delete without .select()
+        const { error } = await supabase
             .from('curated_links')
             .delete()
-            .eq('id', id)
-            .select();
-        
-        console.log('Delete result:', { data, error, count });
-        
+            .eq('id', id);
+
+        console.log('Delete result - error:', error);
+
         if (error) {
-            alert('삭제 실패: ' + error.message + '\n(DB 관리자가 아니라면 삭제 권한이 없을 수 있습니다)');
-        } else if (!data || data.length === 0) {
-            alert('삭제 실패: 권한이 없거나 이미 삭제된 항목입니다.\n(DB 관리자가 아니라면 삭제 권한이 없을 수 있습니다)');
+            console.error('Delete error details:', JSON.stringify(error));
+            alert('삭제 실패: ' + error.message + '\n(코드: ' + error.code + ')');
         } else {
-            loadCuratedLinks();
+            // Verify deletion by checking if item still exists
+            const { data: checkData } = await supabase
+                .from('curated_links')
+                .select('id')
+                .eq('id', id)
+                .single();
+
+            if (checkData) {
+                alert('삭제 실패: 권한이 없어 삭제되지 않았습니다.');
+            } else {
+                loadCuratedLinks();
+            }
         }
     };
 
