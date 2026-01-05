@@ -106,6 +106,7 @@ export default function AdminPage() {
     const [filter, setFilter] = useState<LinkFilter>('all');
     const [userCount, setUserCount] = useState(0);
     const [top10Preview, setTop10Preview] = useState<AdminLink[]>([]);
+    const [featuredFilter, setFeaturedFilter] = useState<'all' | 'user' | 'curated'>('all');
 
     // Curated links state
     const [curatedLinks, setCuratedLinks] = useState<CuratedLink[]>([]);
@@ -2408,47 +2409,144 @@ export default function AdminPage() {
         const featuredUserLinks = links.filter((link: AdminLink) => link.is_featured);
         const featuredCuratedLinks = curatedLinks.filter(link => link.show_in_featured);
 
+        // Apply filter
+        const displayLinks = featuredFilter === 'all' 
+            ? [...featuredUserLinks.map(l => ({ ...l, source: 'user' as const })), ...featuredCuratedLinks.map(l => ({ ...l, source: 'curated' as const }))]
+            : featuredFilter === 'user'
+            ? featuredUserLinks.map(l => ({ ...l, source: 'user' as const }))
+            : featuredCuratedLinks.map(l => ({ ...l, source: 'curated' as const }));
+
         return (
             <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>추천 링크 (유저 등록)</Text>
-                {featuredUserLinks.length === 0 ? (
-                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>추천된 유저 링크가 없습니다</Text>
-                ) : (
-                    featuredUserLinks.map(link => (
-                        <View key={link.id} style={[styles.linkItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <View style={styles.linkInfo}>
-                                <Text style={[styles.linkTitle, { color: colors.text }]} numberOfLines={1}>{link.og_title}</Text>
-                                <Text style={[styles.linkUrl, { color: colors.textSecondary }]} numberOfLines={1}>{link.url}</Text>
-                            </View>
-                            <TouchableOpacity
-                                style={[styles.actionButton, { backgroundColor: '#EF4444' }]}
-                                onPress={async () => {
-                                    await supabase.from('links').update({ is_featured: false }).eq('id', link.id);
-                                    loadLinks();
-                                }}
-                            >
-                                <Text style={{ color: '#FFF', fontSize: 12 }}>제거</Text>
-                            </TouchableOpacity>
-                        </View>
-                    ))
-                )}
+                {/* Filter Buttons */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                    <TouchableOpacity
+                        style={[
+                            styles.filterButton,
+                            { 
+                                backgroundColor: featuredFilter === 'all' ? colors.accent : colors.card,
+                                borderColor: featuredFilter === 'all' ? colors.accent : colors.border
+                            }
+                        ]}
+                        onPress={() => setFeaturedFilter('all')}
+                    >
+                        <Text style={[
+                            styles.filterButtonText,
+                            { color: featuredFilter === 'all' ? '#FFF' : colors.text }
+                        ]}>
+                            전체 ({featuredUserLinks.length + featuredCuratedLinks.length})
+                        </Text>
+                    </TouchableOpacity>
 
-                <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 24 }]}>추천 링크 (큐레이션)</Text>
-                {featuredCuratedLinks.length === 0 ? (
-                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>추천된 큐레이션 링크가 없습니다</Text>
+                    <TouchableOpacity
+                        style={[
+                            styles.filterButton,
+                            { 
+                                backgroundColor: featuredFilter === 'user' ? colors.accent : colors.card,
+                                borderColor: featuredFilter === 'user' ? colors.accent : colors.border
+                            }
+                        ]}
+                        onPress={() => setFeaturedFilter('user')}
+                    >
+                        <Text style={[
+                            styles.filterButtonText,
+                            { color: featuredFilter === 'user' ? '#FFF' : colors.text }
+                        ]}>
+                            유저 등록 ({featuredUserLinks.length})
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[
+                            styles.filterButton,
+                            { 
+                                backgroundColor: featuredFilter === 'curated' ? colors.accent : colors.card,
+                                borderColor: featuredFilter === 'curated' ? colors.accent : colors.border
+                            }
+                        ]}
+                        onPress={() => setFeaturedFilter('curated')}
+                    >
+                        <Text style={[
+                            styles.filterButtonText,
+                            { color: featuredFilter === 'curated' ? '#FFF' : colors.text }
+                        ]}>
+                            큐레이션 ({featuredCuratedLinks.length})
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Links List */}
+                {displayLinks.length === 0 ? (
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                        {featuredFilter === 'all' && '추천된 링크가 없습니다'}
+                        {featuredFilter === 'user' && '추천된 유저 링크가 없습니다'}
+                        {featuredFilter === 'curated' && '추천된 큐레이션 링크가 없습니다'}
+                    </Text>
                 ) : (
-                    featuredCuratedLinks.map(link => (
-                        <View key={link.id} style={[styles.linkItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    displayLinks.map((item: any) => (
+                        <View 
+                            key={`${item.source}-${item.id}`} 
+                            style={[
+                                styles.linkItem, 
+                                { 
+                                    backgroundColor: colors.card, 
+                                    borderColor: colors.border,
+                                    borderLeftWidth: 3,
+                                    borderLeftColor: item.source === 'user' ? '#3B82F6' : '#10B981'
+                                }
+                            ]}
+                        >
                             <View style={styles.linkInfo}>
-                                <Text style={[styles.linkTitle, { color: colors.text }]} numberOfLines={1}>{link.title}</Text>
-                                <Text style={[styles.linkUrl, { color: colors.textSecondary }]} numberOfLines={1}>{link.url}</Text>
-                                <Text style={{ color: colors.accent, fontSize: 12 }}>에디터: {link.nickname || '(미지정)'}</Text>
+                                {/* Source Badge */}
+                                <View style={{ 
+                                    flexDirection: 'row', 
+                                    alignItems: 'center', 
+                                    marginBottom: 4 
+                                }}>
+                                    <View style={{
+                                        backgroundColor: item.source === 'user' ? '#3B82F620' : '#10B98120',
+                                        paddingHorizontal: 8,
+                                        paddingVertical: 2,
+                                        borderRadius: 4,
+                                        marginRight: 8
+                                    }}>
+                                        <Text style={{ 
+                                            color: item.source === 'user' ? '#3B82F6' : '#10B981',
+                                            fontSize: 10,
+                                            fontWeight: '600'
+                                        }}>
+                                            {item.source === 'user' ? '유저' : '큐레이션'}
+                                        </Text>
+                                    </View>
+                                    {item.source === 'curated' && item.nickname && (
+                                        <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
+                                            에디터: {item.nickname}
+                                        </Text>
+                                    )}
+                                </View>
+                                
+                                {/* Title */}
+                                <Text style={[styles.linkTitle, { color: colors.text }]} numberOfLines={2}>
+                                    {item.source === 'user' ? item.og_title : item.title}
+                                </Text>
+                                
+                                {/* URL */}
+                                <Text style={[styles.linkUrl, { color: colors.textSecondary, marginTop: 4 }]} numberOfLines={1}>
+                                    {item.url}
+                                </Text>
                             </View>
+
+                            {/* Remove Button */}
                             <TouchableOpacity
                                 style={[styles.actionButton, { backgroundColor: '#EF4444' }]}
                                 onPress={async () => {
-                                    await supabase.from('curated_links').update({ show_in_featured: false }).eq('id', link.id);
-                                    loadCuratedLinks();
+                                    if (item.source === 'user') {
+                                        await supabase.from('links').update({ is_featured: false }).eq('id', item.id);
+                                        loadLinks();
+                                    } else {
+                                        await supabase.from('curated_links').update({ show_in_featured: false }).eq('id', item.id);
+                                        loadCuratedLinks();
+                                    }
                                 }}
                             >
                                 <Text style={{ color: '#FFF', fontSize: 12 }}>제거</Text>
@@ -3118,5 +3216,15 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    filterButton: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    filterButtonText: {
+        fontSize: 13,
+        fontWeight: '600',
     },
 });
